@@ -40,6 +40,20 @@ dependencies:
   
   # State Management
   provider: ^6.1.1
+  
+  # Connectivity checking
+  connectivity_plus: ^5.0.2
+  
+  # URL launcher for phone calls and external links
+  url_launcher: ^6.2.2
+  
+  # Shared preferences for data persistence
+  shared_preferences: ^2.2.2
+  
+  # SMS autofill for reading OTP from SMS
+  sms_autofill: ^2.3.0
+  
+  # SMS functionality - using native platform channel
 
 dev_dependencies:
   flutter_test:

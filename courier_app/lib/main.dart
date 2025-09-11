@@ -10,7 +10,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'screens/orders/my_deliveries_screen.dart';
-import 'screens/home/create_delivery_screen.dart';import 'screens/profile/profile_screen.dart';
+import 'screens/home/create_delivery_screen.dart';
+import 'screens/profile/profile_screen.dart';
+import 'screens/auth/login_screen.dart';
+import 'screens/auth/otp_screen.dart';
 import 'theme/app_theme.dart';
 
 void main() {
@@ -71,19 +74,44 @@ class MyApp extends StatelessWidget {
 }
 
 final GoRouter _router = GoRouter(
-  initialLocation: '/create-delivery',
+  initialLocation: '/login',
   routes: [
     GoRoute(
+      path: '/login',
+      builder: (context, state) => LoginScreen(),
+    ),
+    GoRoute(
+      path: '/otp',
+      builder: (context, state) {
+        final data = state.extra as Map<String, dynamic>? ?? {};
+        final phoneNumber = data['phone'] as String? ?? '';
+        final expectedOTP = data['otp'] as String?;
+        return OTPScreen(phoneNumber: phoneNumber, expectedOTP: expectedOTP);
+      },
+    ),
+    GoRoute(
       path: '/create-delivery',
-      builder: (context, state) => CreateDeliveryScreen(),
+      builder: (context, state) {
+        final data = state.extra as Map<String, dynamic>? ?? {};
+        final phoneNumber = data['phone'] as String? ?? '';
+        return CreateDeliveryScreen(loggedInPhone: phoneNumber);
+      },
     ),
     GoRoute(
       path: '/my-deliveries',
-      builder: (context, state) => MyDeliveriesScreen(),
+      builder: (context, state) {
+        final data = state.extra as Map<String, dynamic>? ?? {};
+        final phoneNumber = data['phone'] as String? ?? '';
+        return MyDeliveriesScreen(loggedInPhone: phoneNumber);
+      },
     ),
     GoRoute(
       path: '/profile',
-      builder: (context, state) => ProfileScreen(),
+      builder: (context, state) {
+        final data = state.extra as Map<String, dynamic>? ?? {};
+        final phoneNumber = data['phone'] as String? ?? '';
+        return ProfileScreen(loggedInPhone: phoneNumber);
+      },
     ),
   ],
 );

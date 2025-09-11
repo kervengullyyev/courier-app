@@ -8,22 +8,35 @@
 
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:flutter/services.dart';
+import 'package:connectivity_plus/connectivity_plus.dart';
 import '../../widgets/app_bottom_navigation.dart';
 import '../../theme/app_theme.dart';
+import '../../models/delivery.dart';
+import '../../services/delivery_service.dart';
 
 class CreateDeliveryScreen extends StatefulWidget {
+  final String loggedInPhone;
+  
+  const CreateDeliveryScreen({Key? key, this.loggedInPhone = ''}) : super(key: key);
+
   @override
   _CreateDeliveryScreenState createState() => _CreateDeliveryScreenState();
 }
 
 class _CreateDeliveryScreenState extends State<CreateDeliveryScreen> {
+
   final _formKey = GlobalKey<FormState>();
   final _pickupAddressController = TextEditingController();
   final _deliveryAddressController = TextEditingController();
   final _recipientNameController = TextEditingController();
   final _recipientPhoneController = TextEditingController();
   final _descriptionController = TextEditingController();
+  final _senderNameController = TextEditingController();
+  final _senderPhoneController = TextEditingController();
   final FocusNode _senderNameFocus = FocusNode();
+  final Connectivity _connectivity = Connectivity();
+  final DeliveryService _deliveryService = DeliveryService();
   
   String _selectedServiceType = 'city'; // 'city' or 'region'
   String _selectedPickupType = 'easybox'; // 'easybox' or 'address'
@@ -32,7 +45,22 @@ class _CreateDeliveryScreenState extends State<CreateDeliveryScreen> {
   String _selectedDeliveryLocation = ''; // Selected delivery location name
   bool _isPickupSelected = false; // Track if pickup button is clicked
   bool _isDeliverySelected = false; // Track if delivery button is clicked
-  double get _totalPrice => _selectedServiceType == 'city' ? 15.0 : 35.0;
+  bool _isOnline = false; // Track online/offline status based on connectivity
+  int _totalMessageCharCount = 0; // Track total message character count
+  static const int _maxMessageLength = 144; // Maximum SMS message length
+  int get _totalPrice => _selectedServiceType == 'city' ? 15 : 35;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkConnectivity();
+    _connectivity.onConnectivityChanged.listen(_updateConnectivityStatus);
+    _descriptionController.addListener(_updateTotalMessageCharCount);
+    _senderNameController.addListener(_updateTotalMessageCharCount);
+    _senderPhoneController.addListener(_updateTotalMessageCharCount);
+    _recipientNameController.addListener(_updateTotalMessageCharCount);
+    _recipientPhoneController.addListener(_updateTotalMessageCharCount);
+  }
 
   @override
   void dispose() {
@@ -41,8 +69,90 @@ class _CreateDeliveryScreenState extends State<CreateDeliveryScreen> {
     _recipientNameController.dispose();
     _recipientPhoneController.dispose();
     _descriptionController.dispose();
+    _senderNameController.dispose();
+    _senderPhoneController.dispose();
     _senderNameFocus.dispose();
     super.dispose();
+  }
+
+  Future<void> _checkConnectivity() async {
+    try {
+      final connectivityResult = await _connectivity.checkConnectivity();
+      _updateConnectivityStatus(connectivityResult);
+    } catch (e) {
+      print('Connectivity check error: $e');
+      setState(() {
+        _isOnline = false;
+      });
+    }
+  }
+
+  void _updateConnectivityStatus(ConnectivityResult connectivityResult) {
+    setState(() {
+      _isOnline = connectivityResult == ConnectivityResult.mobile ||
+                  connectivityResult == ConnectivityResult.wifi ||
+                  connectivityResult == ConnectivityResult.ethernet;
+    });
+  }
+
+  void _updateTotalMessageCharCount() {
+    setState(() {
+      _totalMessageCharCount = _getTotalMessageLength();
+    });
+  }
+
+  int _getTotalMessageLength() {
+    String message = _createDeliveryMessage();
+    return message.length;
+  }
+
+  bool _isMessageTooLong() {
+    return _getTotalMessageLength() > _maxMessageLength;
+  }
+
+  int _getMaxPackageInfoLength() {
+    // Calculate the base message length without package info
+    int baseMessageLength = _getBaseMessageLength();
+    int remainingChars = _maxMessageLength - baseMessageLength;
+    return remainingChars > 0 ? remainingChars : 0;
+  }
+
+  int _getBaseMessageLength() {
+    // Service type: 1 for city, 2 for inter city
+    String serviceCode = _selectedServiceType == 'city' ? '1' : '2';
+    
+    // Pickup: 1 for easybox, 2 for address + location without vowels
+    String pickupCode = _selectedPickupType == 'easybox' ? '1' : '2';
+    String pickupLocation = _selectedPickupLocation.isNotEmpty ? _removeVowels(_selectedPickupLocation) : '';
+    String pickupInfo = pickupLocation.isNotEmpty ? '$pickupCode-$pickupLocation' : '$pickupCode-';
+    
+    // Delivery: 1 for easybox, 2 for address + location without vowels
+    String deliveryCode = _selectedDeliveryType == 'easybox' ? '1' : '2';
+    String deliveryLocation = _selectedDeliveryLocation.isNotEmpty ? _removeVowels(_selectedDeliveryLocation) : '';
+    String deliveryInfo = deliveryLocation.isNotEmpty ? '$deliveryCode-$deliveryLocation' : '$deliveryCode-';
+    
+    // Sender info
+    String senderName = _senderNameController.text.isNotEmpty ? _senderNameController.text : '';
+    String senderPhone = _senderPhoneController.text.isNotEmpty ? _senderPhoneController.text : '';
+    String senderInfo = senderName.isNotEmpty && senderPhone.isNotEmpty ? '$senderName/$senderPhone' : '';
+    
+    // Recipient info
+    String recipientName = _recipientNameController.text.isNotEmpty ? _recipientNameController.text : '';
+    String recipientPhone = _recipientPhoneController.text.isNotEmpty ? _recipientPhoneController.text : '';
+    String recipientInfo = recipientName.isNotEmpty && recipientPhone.isNotEmpty ? '$recipientName/$recipientPhone' : '';
+    
+    // Price
+    String price = '$_totalPrice man';
+    
+    String baseMessage = '''$serviceCode
+$pickupInfo
+$deliveryInfo
+$senderInfo
+$recipientInfo
+
+$price''';
+    
+    return baseMessage.length;
   }
 
   @override
@@ -52,7 +162,34 @@ class _CreateDeliveryScreenState extends State<CreateDeliveryScreen> {
       appBar: AppBar(
         backgroundColor: Colors.white,
         elevation: 0,
-        title: const Text('Courier Service', style: AppTheme.headerStyle),
+        title: Row(
+          children: [
+            Expanded(
+              child: Text('Courier Service', style: AppTheme.headerStyle),
+            ),
+            Row(
+              children: [
+                Container(
+                  width: 8,
+                  height: 8,
+                  decoration: BoxDecoration(
+                    color: _isOnline ? Colors.green : Colors.red,
+                    shape: BoxShape.circle,
+                  ),
+                ),
+                SizedBox(width: 6),
+                Text(
+                  _isOnline ? 'Online' : 'Offline',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
+                    color: _isOnline ? Colors.green : Colors.red,
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
         leading: const Icon(Icons.local_shipping, color: Colors.blue, size: 28),
       ),
       body: SafeArea(
@@ -111,7 +248,7 @@ class _CreateDeliveryScreenState extends State<CreateDeliveryScreen> {
                           borderRadius: BorderRadius.circular(8),
                           border: Border.all(
                             color: _selectedServiceType == 'city' ? Colors.blue : Colors.grey[300]!,
-                            width: 2,
+                            width: 1.6,
                           ),
                         ),
                         child: Text(
@@ -140,7 +277,7 @@ class _CreateDeliveryScreenState extends State<CreateDeliveryScreen> {
                           borderRadius: BorderRadius.circular(8),
                           border: Border.all(
                             color: _selectedServiceType == 'region' ? Colors.blue : Colors.grey[300]!,
-                            width: 2,
+                            width: 1.6,
                           ),
                         ),
                         child: Text(
@@ -212,7 +349,7 @@ class _CreateDeliveryScreenState extends State<CreateDeliveryScreen> {
                           borderRadius: BorderRadius.circular(8),
                           border: Border.all(
                             color: (_isPickupSelected || _selectedPickupLocation.isNotEmpty) ? Colors.blue : Colors.grey[300]!,
-                            width: 2,
+                            width: 1.6,
                           ),
                         ),
                         child: Row(
@@ -279,7 +416,7 @@ class _CreateDeliveryScreenState extends State<CreateDeliveryScreen> {
                           borderRadius: BorderRadius.circular(8),
                           border: Border.all(
                             color: (_isDeliverySelected || _selectedDeliveryLocation.isNotEmpty) ? Colors.blue : Colors.grey[300]!,
-                            width: 2,
+                            width: 1.6,
                           ),
                         ),
                         child: Row(
@@ -360,19 +497,23 @@ class _CreateDeliveryScreenState extends State<CreateDeliveryScreen> {
                 children: [
                   // Sender Name
                   TextFormField(
+                    controller: _senderNameController,
                     focusNode: _senderNameFocus,
+                    maxLength: 28,
+                    textCapitalization: TextCapitalization.words,
                     decoration: InputDecoration(
                       hintText: 'Sender Full Name',
                       hintStyle: TextStyle(fontSize: 16, fontWeight: FontWeight.w500, color: Colors.grey[500]),
                       enabledBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(8),
-                        borderSide: BorderSide(color: Colors.grey[300]!, width: 2),
+                        borderSide: BorderSide(color: Colors.grey[300]!, width: 1.6),
                       ),
                       focusedBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(8),
-                        borderSide: BorderSide(color: Colors.blue, width: 2),
+                        borderSide: BorderSide(color: Colors.blue, width: 1.6),
                       ),
                       contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                      counterText: '', // Hide the default counter
                     ),
                   ),
                   SizedBox(height: 16),
@@ -384,7 +525,7 @@ class _CreateDeliveryScreenState extends State<CreateDeliveryScreen> {
                         height: 48,
                         padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                         decoration: BoxDecoration(
-                          border: Border.all(color: Colors.grey[300]!, width: 2),
+                          border: Border.all(color: Colors.grey[300]!, width: 1.6),
                           borderRadius: BorderRadius.circular(8),
                         ),
                         child: Center(
@@ -397,19 +538,25 @@ class _CreateDeliveryScreenState extends State<CreateDeliveryScreen> {
                       SizedBox(width: 8),
                       Expanded(
                         child: TextFormField(
-                          keyboardType: TextInputType.phone,
+                          controller: _senderPhoneController,
+                          keyboardType: TextInputType.number,
+                          maxLength: 8,
+                          inputFormatters: [
+                            FilteringTextInputFormatter.digitsOnly,
+                          ],
                           decoration: InputDecoration(
                             hintText: 'Sender Phone Number',
                             hintStyle: TextStyle(fontSize: 16, fontWeight: FontWeight.w500, color: Colors.grey[500]),
                             enabledBorder: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(8),
-                              borderSide: BorderSide(color: Colors.grey[300]!, width: 2),
+                              borderSide: BorderSide(color: Colors.grey[300]!, width: 1.6),
                             ),
                             focusedBorder: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(8),
-                              borderSide: BorderSide(color: Colors.blue, width: 2),
+                              borderSide: BorderSide(color: Colors.blue, width: 1.6),
                             ),
                             contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                            counterText: '', // Hide the default counter
                           ),
                         ),
                       ),
@@ -459,18 +606,21 @@ class _CreateDeliveryScreenState extends State<CreateDeliveryScreen> {
                   // Recipient Name
                   TextFormField(
                     controller: _recipientNameController,
+                    maxLength: 28,
+                    textCapitalization: TextCapitalization.words,
                     decoration: InputDecoration(
                       hintText: 'Recipient Full Name',
                       hintStyle: TextStyle(fontSize: 16, fontWeight: FontWeight.w500, color: Colors.grey[500]),
                       enabledBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(8),
-                        borderSide: BorderSide(color: Colors.grey[300]!, width: 2),
+                        borderSide: BorderSide(color: Colors.grey[300]!, width: 1.6),
                       ),
                       focusedBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(8),
-                        borderSide: BorderSide(color: Colors.blue, width: 2),
+                        borderSide: BorderSide(color: Colors.blue, width: 1.6),
                       ),
                       contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                      counterText: '', // Hide the default counter
                     ),
                     validator: (value) {
                       if (value == null || value.isEmpty) {
@@ -490,7 +640,7 @@ class _CreateDeliveryScreenState extends State<CreateDeliveryScreen> {
                         height: 48,
                         padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                         decoration: BoxDecoration(
-                          border: Border.all(color: Colors.grey[300]!, width: 2),
+                          border: Border.all(color: Colors.grey[300]!, width: 1.6),
                           borderRadius: BorderRadius.circular(8),
                         ),
                         child: Center(
@@ -504,19 +654,24 @@ class _CreateDeliveryScreenState extends State<CreateDeliveryScreen> {
                       Expanded(
                         child: TextFormField(
                           controller: _recipientPhoneController,
-                          keyboardType: TextInputType.phone,
+                          keyboardType: TextInputType.number,
+                          maxLength: 8,
+                          inputFormatters: [
+                            FilteringTextInputFormatter.digitsOnly,
+                          ],
                           decoration: InputDecoration(
                             hintText: 'Recipient Phone Number',
                             hintStyle: TextStyle(fontSize: 16, fontWeight: FontWeight.w500, color: Colors.grey[500]),
                             enabledBorder: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(8),
-                              borderSide: BorderSide(color: Colors.grey[300]!, width: 2),
+                              borderSide: BorderSide(color: Colors.grey[300]!, width: 1.6),
                             ),
                             focusedBorder: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(8),
-                              borderSide: BorderSide(color: Colors.blue, width: 2),
+                              borderSide: BorderSide(color: Colors.blue, width: 1.6),
                             ),
                             contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                            counterText: '', // Hide the default counter
                           ),
                           validator: (value) {
                             if (value == null || value.isEmpty) {
@@ -572,20 +727,41 @@ class _CreateDeliveryScreenState extends State<CreateDeliveryScreen> {
                   TextFormField(
                     controller: _descriptionController,
                     maxLines: 3,
+                    maxLength: _getMaxPackageInfoLength(),
+                    enabled: !_isMessageTooLong(),
+                    textCapitalization: TextCapitalization.sentences,
                     decoration: InputDecoration(
                       hintText: 'Package Information',
                       hintStyle: TextStyle(fontSize: 16, fontWeight: FontWeight.w500, color: Colors.grey[500]),
                       enabledBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(8),
-                        borderSide: BorderSide(color: Colors.grey[300]!, width: 2),
+                        borderSide: BorderSide(color: Colors.grey[300]!, width: 1.6),
                       ),
                       focusedBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(8),
-                        borderSide: BorderSide(color: Colors.blue, width: 2),
+                        borderSide: BorderSide(color: Colors.blue, width: 1.6),
+                      ),
+                      disabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide: BorderSide(color: Colors.red[300]!, width: 1.6),
                       ),
                       contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                      suffixText: '${_totalMessageCharCount}/$_maxMessageLength',
+                      suffixStyle: TextStyle(
+                        color: _isMessageTooLong() ? Colors.red : Colors.grey[600],
+                        fontWeight: FontWeight.bold,
+                      ),
+                      counterText: '', // Hide the default counter
                     ),
                   ),
+                  if (_isMessageTooLong())
+                    Padding(
+                      padding: EdgeInsets.only(top: 8),
+                      child: Text(
+                        'Message exceeds $_maxMessageLength characters! Reduce package info.',
+                        style: TextStyle(color: Colors.red, fontSize: 12),
+                      ),
+                    ),
                 ],
               ),
             ),
@@ -651,18 +827,464 @@ class _CreateDeliveryScreenState extends State<CreateDeliveryScreen> {
           ],
         ),
       ),
-      bottomNavigationBar: const AppBottomNavigation(currentIndex: 0),
+      bottomNavigationBar: AppBottomNavigation(currentIndex: 0, loggedInPhone: widget.loggedInPhone),
     );
   }
 
   void _createDelivery() async {
-    if (_formKey.currentState!.validate()) {
-      // Simulate delivery creation
+    print('Tassykla button clicked!'); // Debug log
+    
+    // Validate required fields
+    if (!_validateRequiredFields()) {
+      return; // Stop if validation fails
+    }
+    
+    // Check message length before sending
+    String message = _createDeliveryMessage();
+    int messageLength = message.length;
+    print('Message length: $messageLength characters'); // Debug log
+    
+    if (messageLength > _maxMessageLength) {
+      // Show alert for long message
+      showDialog(
+        context: context,
+        builder: (BuildContext context) {
+          return AlertDialog(
+            title: Text('Long Message Warning'),
+            content: Text('Your message is $messageLength characters long (exceeds $_maxMessageLength characters). This will be sent as multiple SMS messages. Continue?'),
+            actions: [
+              TextButton(
+                onPressed: () {
+                  Navigator.of(context).pop();
+                },
+                child: Text('Cancel'),
+              ),
+              TextButton(
+                onPressed: () async {
+                  Navigator.of(context).pop();
+                  await _proceedWithSMS();
+                },
+                child: Text('Continue'),
+              ),
+            ],
+          );
+        },
+      );
+    } else {
+      // Message is short enough, proceed directly
+      await _proceedWithSMS();
+    }
+  }
+
+  bool _validateRequiredFields() {
+    List<String> errors = [];
+    
+    // Check pickup location
+    if (_selectedPickupLocation.isEmpty) {
+      errors.add('Please select a pickup location');
+    }
+    
+    // Check delivery location
+    if (_selectedDeliveryLocation.isEmpty) {
+      errors.add('Please select a delivery location');
+    }
+    
+    // Check sender name (minimum 2 characters)
+    String senderName = _senderNameController.text.trim();
+    if (senderName.isEmpty) {
+      errors.add('Please enter sender full name');
+    } else if (senderName.length < 2) {
+      errors.add('Sender name must be at least 2 characters');
+    }
+    
+    // Check sender phone (exactly 8 characters)
+    String senderPhone = _senderPhoneController.text.trim();
+    if (senderPhone.isEmpty) {
+      errors.add('Please enter sender phone number');
+    } else if (senderPhone.length != 8) {
+      errors.add('Sender phone number must be exactly 8 characters');
+    }
+    
+    // Check recipient name (minimum 2 characters)
+    String recipientName = _recipientNameController.text.trim();
+    if (recipientName.isEmpty) {
+      errors.add('Please enter recipient full name');
+    } else if (recipientName.length < 2) {
+      errors.add('Recipient name must be at least 2 characters');
+    }
+    
+    // Check recipient phone (exactly 8 characters)
+    String recipientPhone = _recipientPhoneController.text.trim();
+    if (recipientPhone.isEmpty) {
+      errors.add('Please enter recipient phone number');
+    } else if (recipientPhone.length != 8) {
+      errors.add('Recipient phone number must be exactly 8 characters');
+    }
+    
+    // Show errors if any
+    if (errors.isNotEmpty) {
+      showDialog(
+        context: context,
+        builder: (BuildContext context) {
+          return Dialog(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Container(
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(16),
+                color: Colors.white,
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Red header with warning icon
+                  Container(
+                    width: double.infinity,
+                    padding: EdgeInsets.all(20),
+                    decoration: BoxDecoration(
+                      color: Colors.red,
+                      borderRadius: BorderRadius.only(
+                        topLeft: Radius.circular(16),
+                        topRight: Radius.circular(16),
+                      ),
+                    ),
+                    child: Icon(
+                      Icons.warning,
+                      color: Colors.white,
+                      size: 40,
+                    ),
+                  ),
+                  // White body with content
+                  Container(
+                    padding: EdgeInsets.all(20),
+                    child: Column(
+                      children: [
+                        ...errors.asMap().entries.map((entry) {
+                          int index = entry.key;
+                          String error = entry.value;
+                          return Column(
+                            children: [
+                              Align(
+                                alignment: Alignment.centerLeft,
+                                child: Text(
+                                  error,
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    color: Colors.grey[700],
+                                  ),
+                                ),
+                              ),
+                              if (index < errors.length - 1) // Add separator except for last item
+                                Container(
+                                  margin: EdgeInsets.symmetric(vertical: 8),
+                                  height: 1,
+                                  color: Colors.grey[300],
+                                ),
+                            ],
+                          );
+                        }).toList(),
+                        SizedBox(height: 20),
+                        // Red close button
+                        Container(
+                          width: double.infinity,
+                          child: ElevatedButton(
+                            onPressed: () {
+                              Navigator.of(context).pop();
+                            },
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.red,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              padding: EdgeInsets.symmetric(vertical: 12),
+                            ),
+                            child: Text(
+                              'Close',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      );
+      return false;
+    }
+    
+    return true;
+  }
+
+  void _showSuccessDialog() {
+    showDialog(
+      context: context,
+      barrierDismissible: false, // Prevent dismissing by tapping outside
+      builder: (BuildContext context) {
+        return Dialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: Container(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(16),
+              color: Colors.white,
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Green success icon
+                Container(
+                  margin: EdgeInsets.only(top: 20),
+                  child: Container(
+                    width: 50,
+                    height: 50,
+                    decoration: BoxDecoration(
+                      color: Colors.green,
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(
+                      Icons.check,
+                      color: Colors.white,
+                      size: 25,
+                    ),
+                  ),
+                ),
+                SizedBox(height: 14),
+                // Success title
+                Text(
+                  'Successful!',
+                  style: TextStyle(
+                    fontSize: 24,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.black,
+                  ),
+                ),
+                SizedBox(height: 8),
+                // Success message
+                Text(
+                  'Your transaction was successful',
+                  style: TextStyle(
+                    fontSize: 16,
+                    color: Colors.black,
+                  ),
+                ),
+                SizedBox(height: 20),
+                // Transaction details
+                Container(
+                  margin: EdgeInsets.symmetric(horizontal: 20),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _buildDetailRow('Service Type:', _selectedServiceType == 'city' ? 'City' : 'Regional'),
+                      _buildDetailRow('Pickup Type:', _selectedPickupType == 'easybox' ? 'EasyBox' : 'Address'),
+                      _buildDetailRow('Pickup Location:', _selectedPickupLocation.isNotEmpty ? _selectedPickupLocation : 'Not specified'),
+                      _buildDetailRow('Delivery Type:', _selectedDeliveryType == 'easybox' ? 'EasyBox' : 'Address'),
+                      _buildDetailRow('Delivery Location:', _selectedDeliveryLocation.isNotEmpty ? _selectedDeliveryLocation : 'Not specified'),
+                      _buildDetailRow('Sender Full Name:', _senderNameController.text.isNotEmpty ? _senderNameController.text : 'Not specified'),
+                      _buildDetailRow('Sender Phone Number:', _senderPhoneController.text.isNotEmpty ? '+993${_senderPhoneController.text}' : 'Not specified'),
+                      _buildDetailRow('Recipient Full Name:', _recipientNameController.text.isNotEmpty ? _recipientNameController.text : 'Not specified'),
+                      _buildDetailRow('Recipient Phone Number:', _recipientPhoneController.text.isNotEmpty ? '+993${_recipientPhoneController.text}' : 'Not specified'),
+                      _buildDetailRow('Package Info:', _descriptionController.text.isNotEmpty ? _descriptionController.text : 'Not specified'),
+                      _buildDetailRow('Total Order:', '$_totalPrice manat', isLast: true),
+                    ],
+                  ),
+                ),
+                SizedBox(height: 20),
+                // Green OK button
+                Container(
+                  margin: EdgeInsets.fromLTRB(20, 0, 20, 20),
+                  width: double.infinity,
+                    child: ElevatedButton(
+                      onPressed: () {
+                        Navigator.of(context).pop();
+                        _addDeliveryToOrders();
+                        context.go('/my-deliveries');
+                      },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.green,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(25),
+                      ),
+                      padding: EdgeInsets.symmetric(vertical: 12),
+                    ),
+                    child: Text(
+                      'OK',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildDetailRow(String label, String value, {bool isLast = false}) {
+    return Column(
+      children: [
+        Padding(
+          padding: EdgeInsets.symmetric(vertical: 2),
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: Text(
+              '$label $value',
+              style: TextStyle(
+                fontSize: 14,
+                color: Colors.black,
+              ),
+            ),
+          ),
+        ),
+        if (!isLast) // Add separator except for last item
+          Container(
+            margin: EdgeInsets.symmetric(vertical: 4),
+            height: 1,
+            color: Colors.grey[300],
+          ),
+      ],
+    );
+  }
+
+  Future<void> _proceedWithSMS() async {
+    try {
+      // Send SMS to the specified phone number immediately
+      print('Attempting to send SMS...'); // Debug log
+      await _sendSMS();
+      print('SMS sent successfully'); // Debug log
+      
+      // Show success dialog
+      _showSuccessDialog();
+    } catch (e) {
+      print('SMS error: $e'); // Debug log
+      // Show error message if SMS fails
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Delivery created successfully')),
+        SnackBar(content: Text('SMS failed: ${e.toString()}')),
       );
       context.go('/my-deliveries');
     }
+  }
+
+  Future<void> _sendSMS() async {
+    try {
+      print('Starting background SMS sending...'); // Debug log
+      
+      // Create detailed delivery message
+      String message = _createDeliveryMessage();
+      String recipient = '+40741302753';
+      
+      print('Sending SMS to $recipient with message: $message'); // Debug log
+      
+      // Use platform channel to send SMS directly
+      const platform = MethodChannel('com.example.courier_app/sms');
+      
+      final String result = await platform.invokeMethod('sendSMS', {
+        'phoneNumber': recipient,
+        'message': message,
+        'useDivideMessage': true,
+      });
+      
+      print('SMS result: $result'); // Debug log
+      print('SMS sent successfully in background!'); // Debug log
+    } catch (e) {
+      print('Background SMS error: $e'); // Debug log
+      throw Exception('Failed to send SMS in background: $e');
+    }
+  }
+
+  String _createDeliveryMessage() {
+    // Service type: 1 for city, 2 for inter city
+    String serviceCode = _selectedServiceType == 'city' ? '1' : '2';
+    
+    // Pickup: 1 for easybox, 2 for address + location without vowels
+    String pickupCode = _selectedPickupType == 'easybox' ? '1' : '2';
+    String pickupLocation = _selectedPickupLocation.isNotEmpty ? _removeVowels(_selectedPickupLocation) : '';
+    String pickupInfo = pickupLocation.isNotEmpty ? '$pickupCode-$pickupLocation' : '$pickupCode-';
+    
+    // Delivery: 1 for easybox, 2 for address + location without vowels
+    String deliveryCode = _selectedDeliveryType == 'easybox' ? '1' : '2';
+    String deliveryLocation = _selectedDeliveryLocation.isNotEmpty ? _removeVowels(_selectedDeliveryLocation) : '';
+    String deliveryInfo = deliveryLocation.isNotEmpty ? '$deliveryCode-$deliveryLocation' : '$deliveryCode-';
+    
+    // Sender info
+    String senderName = _senderNameController.text.isNotEmpty ? _senderNameController.text : '';
+    String senderPhone = _senderPhoneController.text.isNotEmpty ? _senderPhoneController.text : '';
+    String senderInfo = senderName.isNotEmpty && senderPhone.isNotEmpty ? '$senderName/$senderPhone' : '';
+    
+    // Recipient info
+    String recipientName = _recipientNameController.text.isNotEmpty ? _recipientNameController.text : '';
+    String recipientPhone = _recipientPhoneController.text.isNotEmpty ? _recipientPhoneController.text : '';
+    String recipientInfo = recipientName.isNotEmpty && recipientPhone.isNotEmpty ? '$recipientName/$recipientPhone' : '';
+    
+    // Package info
+    String packageInfo = _descriptionController.text.isNotEmpty ? _descriptionController.text : '';
+    
+    // Price
+    String price = '$_totalPrice man';
+    
+    String message = '''$serviceCode
+$pickupInfo
+$deliveryInfo
+$senderInfo
+$recipientInfo
+$packageInfo
+$price''';
+    
+    print('Complete SMS message: $message'); // Debug log
+    return message.trim();
+  }
+
+  String _removeVowels(String text) {
+    if (text.isEmpty) return '';
+    return text.replaceAll(RegExp(r'[aeiouAEIOU]'), '').toUpperCase();
+  }
+
+  void _addDeliveryToOrders() {
+    final newDelivery = Delivery(
+      id: _deliveryService.getNextId(),
+      pickupAddress: _pickupAddressController.text.isNotEmpty 
+          ? _pickupAddressController.text 
+          : _selectedPickupLocation,
+      deliveryAddress: _deliveryAddressController.text.isNotEmpty 
+          ? _deliveryAddressController.text 
+          : _selectedDeliveryLocation,
+      status: 'Pending',
+      courier: null,
+      recipient: Recipient(
+        fullName: _recipientNameController.text,
+        phoneNumber: '+993${_recipientPhoneController.text}',
+      ),
+      sender: Sender(
+        fullName: _senderNameController.text,
+        phoneNumber: '+993${_senderPhoneController.text}',
+      ),
+      createdAt: DateTime.now().toString().split(' ')[0], // Today's date
+      price: _totalPrice.toDouble(),
+      serviceType: _selectedServiceType,
+      pickupType: _selectedPickupType,
+      deliveryType: _selectedDeliveryType,
+      pickupLocation: _selectedPickupLocation,
+      deliveryLocation: _selectedDeliveryLocation,
+      packageDescription: _descriptionController.text.isNotEmpty 
+          ? _descriptionController.text 
+          : null,
+    );
+
+    _deliveryService.addDelivery(newDelivery);
   }
 
   void _showPickupOptionsDialog() {

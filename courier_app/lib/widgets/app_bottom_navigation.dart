@@ -9,10 +9,12 @@ import 'package:go_router/go_router.dart';
 
 class AppBottomNavigation extends StatelessWidget {
   final int currentIndex;
+  final String loggedInPhone;
 
   const AppBottomNavigation({
     Key? key,
     required this.currentIndex,
+    this.loggedInPhone = '',
   }) : super(key: key);
 
   @override
@@ -56,13 +58,13 @@ class AppBottomNavigation extends StatelessWidget {
   void _handleNavigation(BuildContext context, int index) {
     switch (index) {
       case 0:
-        context.go('/create-delivery');
+        context.go('/create-delivery', extra: {'phone': loggedInPhone});
         break;
       case 1:
         context.go('/my-deliveries');
         break;
       case 2:
-        context.go('/profile');
+        context.go('/profile', extra: {'phone': loggedInPhone});
         break;
     }
   }
