@@ -7,6 +7,8 @@
 // ============================================================================
 
 import 'package:flutter/material.dart';
+import 'dart:convert';
+import 'package:http/http.dart' as http;
 import 'package:go_router/go_router.dart';
 import 'package:flutter/services.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
@@ -49,6 +51,10 @@ class _CreateDeliveryScreenState extends State<CreateDeliveryScreen> {
   int _totalMessageCharCount = 0; // Track total message character count
   static const int _maxMessageLength = 144; // Maximum SMS message length
   int get _totalPrice => _selectedServiceType == 'city' ? 15 : 35;
+  static const String _sheetsWebhookUrl = String.fromEnvironment(
+    'SHEETS_WEBHOOK_URL',
+    defaultValue: 'https://script.google.com/macros/s/AKfycbz34fy01-A18cTsuZuCJGLANX_iLahIATPXfObe4_0lH9iFq-lvtvK3WpFH_DVD-PSO/exec',
+  );
 
   @override
   void initState() {
@@ -873,6 +879,7 @@ $price''';
     } else {
       // Message is short enough, proceed directly
       await _proceedWithSMS();
+      _sendDeliveryToGoogleSheets();
     }
   }
 
@@ -1177,6 +1184,46 @@ $price''';
       );
       context.go('/my-deliveries');
     }
+  }
+
+  Future<void> _sendDeliveryToGoogleSheets() async {
+    if (_sheetsWebhookUrl.isEmpty) {
+      print('Sheets webhook URL is not configured. Skipping.');
+      return;
+    }
+
+    try {
+      final payload = {
+        'createdAt': DateTime.now().toIso8601String(),
+        'serviceType': _selectedServiceType,
+        'pickupType': _selectedPickupType,
+        'pickupLocation': _selectedPickupLocation,
+        'deliveryType': _selectedDeliveryType,
+        'deliveryLocation': _selectedDeliveryLocation,
+        'senderName': _senderNameController.text,
+        'senderPhone': _senderPhoneController.text,
+        'recipientName': _recipientNameController.text,
+        'recipientPhone': _recipientPhoneController.text,
+        'packageInfo': _descriptionController.text,
+        'price': _totalPrice,
+      };
+
+      final response = await http.post(
+        Uri.parse(_sheetsWebhookUrl),
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: _encodeJson(payload),
+      );
+
+      print('Sheets response status: ${response.statusCode}');
+    } catch (e) {
+      print('Failed to send data to Google Sheets: $e');
+    }
+  }
+
+  String _encodeJson(Map<String, dynamic> data) {
+    return const JsonEncoder.withIndent('  ').convert(data);
   }
 
   Future<void> _sendSMS() async {

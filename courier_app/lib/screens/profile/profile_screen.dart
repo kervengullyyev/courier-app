@@ -383,8 +383,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
       ),
     );
 
-    // Navigate back to login screen
-    context.go('/login');
+    // Navigate back to main screen
+    context.go('/create-delivery');
   }
 
   @override

@@ -54,6 +54,7 @@ dependencies:
   sms_autofill: ^2.3.0
   
   # SMS functionality - using native platform channel
+  http: ^1.2.2
 
 dev_dependencies:
   flutter_test:
