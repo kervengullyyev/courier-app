@@ -32,9 +32,6 @@ class _MyDeliveriesScreenState extends State<MyDeliveriesScreen> {
 
   Future<void> _bootstrapDeliveries() async {
     await _deliveryService.loadFromPreferences();
-    if (_deliveryService.deliveries.isEmpty) {
-      _deliveryService.initializeWithSampleData();
-    }
     if (mounted) setState(() {});
   }
 

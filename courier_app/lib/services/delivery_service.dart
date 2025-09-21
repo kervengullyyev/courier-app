@@ -67,65 +67,6 @@ class DeliveryService {
     await prefs.setString('deliveries', json.encode(payload));
   }
 
-  // Initialize with sample data
-  void initializeWithSampleData() {
-    if (_deliveries.isEmpty) {
-      _deliveries = [
-        Delivery(
-          id: 1,
-          pickupAddress: 'Easybox - Ashgabat Center',
-          deliveryAddress: 'Easybox - Mary City',
-          status: 'In Transit',
-          courier: const Courier(fullName: 'Ahmet Rahmanov'),
-          recipient: const Recipient(fullName: 'Gulnara Berdiyeva', phoneNumber: '+993 12 34 56 78'),
-          sender: const Sender(fullName: 'Ahmet Rahmanov', phoneNumber: '+993 12 34 56 78'),
-          createdAt: '2024-01-15 14:30:00',
-          price: 15.0,
-          serviceType: 'city',
-          pickupType: 'easybox',
-          deliveryType: 'easybox',
-          pickupLocation: 'Ashgabat Center',
-          deliveryLocation: 'Mary City',
-          packageDescription: 'Documents and small package',
-        ),
-        Delivery(
-          id: 2,
-          pickupAddress: '123 Main Street, Ashgabat',
-          deliveryAddress: '456 Oak Avenue, Turkmenabat',
-          status: 'Delivered',
-          courier: const Courier(fullName: 'Saparmurat Niyazov'),
-          recipient: const Recipient(fullName: 'Merdan Atayev', phoneNumber: '+993 23 45 67 89'),
-          sender: const Sender(fullName: 'Gurbanguly Berdimuhamedov', phoneNumber: '+993 23 45 67 89'),
-          createdAt: '2024-01-14 09:15:00',
-          price: 35.0,
-          serviceType: 'inter-city',
-          pickupType: 'address',
-          deliveryType: 'address',
-          pickupLocation: 'Ashgabat City Center',
-          deliveryLocation: 'Turkmenabat District',
-          packageDescription: 'Electronics and fragile items',
-        ),
-        Delivery(
-          id: 3,
-          pickupAddress: 'Easybox - Balkanabat',
-          deliveryAddress: '789 Pine Road, Dashoguz',
-          status: 'Pending',
-          courier: null,
-          recipient: const Recipient(fullName: 'Aysoltan Orazova', phoneNumber: '+993 34 56 78 90'),
-          sender: const Sender(fullName: 'Oguljeren Berdiyeva', phoneNumber: '+993 34 56 78 90'),
-          createdAt: '2024-01-13 16:45:00',
-          price: 15.0,
-          serviceType: 'city',
-          pickupType: 'easybox',
-          deliveryType: 'address',
-          pickupLocation: 'Balkanabat',
-          deliveryLocation: 'Dashoguz Area',
-          packageDescription: 'Clothing and personal items',
-        ),
-      ];
-    }
-  }
-
   // Generate next ID
   int getNextId() {
     if (_deliveries.isEmpty) return 1;

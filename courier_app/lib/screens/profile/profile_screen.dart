@@ -465,15 +465,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
               _buildContactOption(
                 icon: Icons.phone,
                 title: 'Call Support',
-                subtitle: '+993741302753',
-                onTap: () => _makePhoneCall('+993741302753'),
-              ),
-              SizedBox(height: 12),
-              _buildContactOption(
-                icon: Icons.email,
-                title: 'Email Support',
-                subtitle: 'support@tizgo.com',
-                onTap: () => _sendEmail('support@tizgo.com'),
+                subtitle: '+99362676755',
+                onTap: () => _makePhoneCall('+99362676755'),
               ),
             ],
           ),
@@ -631,25 +624,4 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
-  Future<void> _sendEmail(String email) async {
-    final Uri emailUri = Uri(
-      scheme: 'mailto',
-      path: email,
-      query: 'subject=TizGo Support Request',
-    );
-    if (await canLaunchUrl(emailUri)) {
-      await launchUrl(emailUri);
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Could not open email client'),
-          backgroundColor: Colors.red[600],
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(AppTheme.defaultBorderRadius),
-          ),
-        ),
-      );
-    }
-  }
 }
