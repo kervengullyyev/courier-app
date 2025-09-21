@@ -7,7 +7,6 @@
 // ============================================================================
 
 import 'package:flutter/material.dart';
-import 'package:go_router/go_router.dart';
 import '../../theme/app_theme.dart';
 import '../../models/delivery.dart';
 
@@ -36,38 +35,7 @@ class DeliveryDetailsScreen extends StatelessWidget {
         child: SingleChildScrollView(
           child: Column(
             children: [
-              // Status Card
-              Container(
-                margin: const EdgeInsets.all(AppTheme.defaultPadding),
-                padding: const EdgeInsets.all(AppTheme.defaultPadding),
-                decoration: AppTheme.cardDecoration,
-                child: Column(
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          'Status',
-                          style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                            color: AppTheme.textPrimaryColor,
-                          ),
-                        ),
-                        _buildStatusChip(delivery.status),
-                      ],
-                    ),
-                    SizedBox(height: AppTheme.smallPadding),
-                    Text(
-                      _getStatusDescription(delivery.status),
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: AppTheme.textSecondaryColor,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
+              SizedBox(height: 16),
 
               // Service Information
               Container(
@@ -207,59 +175,6 @@ class DeliveryDetailsScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildStatusChip(String status) {
-    Color backgroundColor;
-    Color textColor;
-    IconData icon;
-    
-    switch (status.toLowerCase()) {
-      case 'pending':
-        backgroundColor = Colors.orange[50]!;
-        textColor = Colors.orange[700]!;
-        icon = Icons.schedule;
-        break;
-      case 'in transit':
-        backgroundColor = Colors.blue[50]!;
-        textColor = Colors.blue[700]!;
-        icon = Icons.local_shipping;
-        break;
-      case 'delivered':
-        backgroundColor = Colors.green[50]!;
-        textColor = Colors.green[700]!;
-        icon = Icons.check_circle;
-        break;
-      default:
-        backgroundColor = Colors.grey[50]!;
-        textColor = Colors.grey[700]!;
-        icon = Icons.help_outline;
-    }
-    
-    return Container(
-      padding: EdgeInsets.symmetric(
-        horizontal: AppTheme.smallPadding,
-        vertical: 6,
-      ),
-      decoration: BoxDecoration(
-        color: backgroundColor,
-        borderRadius: BorderRadius.circular(AppTheme.smallBorderRadius),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 16, color: textColor),
-          SizedBox(width: 6),
-          Text(
-            status,
-            style: TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.w600,
-              color: textColor,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
 
   Widget _buildInfoRow(String label, String value) {
     return Padding(
@@ -349,14 +264,14 @@ class DeliveryDetailsScreen extends StatelessWidget {
           width: 40,
           height: 40,
           decoration: BoxDecoration(
-            color: Colors.blue[50],
+            color: AppTheme.primaryColor50,
             borderRadius: BorderRadius.circular(20),
           ),
           child: Center(
             child: Icon(
               icon,
               size: 20,
-              color: Colors.blue[700],
+              color: AppTheme.primaryColor700,
             ),
           ),
         ),
@@ -397,16 +312,4 @@ class DeliveryDetailsScreen extends StatelessWidget {
     );
   }
 
-  String _getStatusDescription(String status) {
-    switch (status.toLowerCase()) {
-      case 'pending':
-        return 'Your delivery request has been received and is being processed.';
-      case 'in transit':
-        return 'Your package is on its way to the destination.';
-      case 'delivered':
-        return 'Your package has been successfully delivered.';
-      default:
-        return 'Status information is not available.';
-    }
-  }
 }

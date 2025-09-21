@@ -1,7 +1,7 @@
 // ============================================================================
-// COURIER APP - MAIN ENTRY POINT
+// TIZGO APP - MAIN ENTRY POINT
 // ============================================================================
-// This is the main entry point for the Courier App.
+// This is the main entry point for the TizGo App.
 // Features: App routing, theme configuration, system UI setup
 // Screens: Home (Create Delivery), Orders (My Deliveries), Profile
 // ============================================================================
@@ -12,8 +12,6 @@ import 'package:go_router/go_router.dart';
 import 'screens/orders/my_deliveries_screen.dart';
 import 'screens/home/create_delivery_screen.dart';
 import 'screens/profile/profile_screen.dart';
-import 'screens/auth/login_screen.dart';
-import 'screens/auth/otp_screen.dart';
 import 'theme/app_theme.dart';
 
 void main() {
@@ -32,9 +30,20 @@ class MyApp extends StatelessWidget {
         systemNavigationBarIconBrightness: Brightness.dark,
       ),
       child: MaterialApp.router(
-          title: 'Courier App',
+          title: 'TizGo',
           theme: ThemeData(
-            primarySwatch: Colors.blue,
+            primarySwatch: MaterialColor(0xFF0065F8, {
+              50: Color(0xFFE3F2FD),
+              100: Color(0xFFBBDEFB),
+              200: Color(0xFF90CAF9),
+              300: Color(0xFF64B5F6),
+              400: Color(0xFF42A5F5),
+              500: Color(0xFF0065F8),
+              600: Color(0xFF1E88E5),
+              700: Color(0xFF1976D2),
+              800: Color(0xFF1565C0),
+              900: Color(0xFF0D47A1),
+            }),
             visualDensity: VisualDensity.adaptivePlatformDensity,
             fontFamily: 'Inter',
             scaffoldBackgroundColor: AppTheme.backgroundColor,
@@ -77,41 +86,16 @@ final GoRouter _router = GoRouter(
   initialLocation: '/create-delivery',
   routes: [
     GoRoute(
-      path: '/login',
-      builder: (context, state) => LoginScreen(),
-    ),
-    GoRoute(
-      path: '/otp',
-      builder: (context, state) {
-        final data = state.extra as Map<String, dynamic>? ?? {};
-        final phoneNumber = data['phone'] as String? ?? '';
-        final expectedOTP = data['otp'] as String?;
-        return OTPScreen(phoneNumber: phoneNumber, expectedOTP: expectedOTP);
-      },
-    ),
-    GoRoute(
       path: '/create-delivery',
-      builder: (context, state) {
-        final data = state.extra as Map<String, dynamic>? ?? {};
-        final phoneNumber = data['phone'] as String? ?? '';
-        return CreateDeliveryScreen(loggedInPhone: phoneNumber);
-      },
+      builder: (context, state) => CreateDeliveryScreen(),
     ),
     GoRoute(
       path: '/my-deliveries',
-      builder: (context, state) {
-        final data = state.extra as Map<String, dynamic>? ?? {};
-        final phoneNumber = data['phone'] as String? ?? '';
-        return MyDeliveriesScreen(loggedInPhone: phoneNumber);
-      },
+      builder: (context, state) => MyDeliveriesScreen(),
     ),
     GoRoute(
       path: '/profile',
-      builder: (context, state) {
-        final data = state.extra as Map<String, dynamic>? ?? {};
-        final phoneNumber = data['phone'] as String? ?? '';
-        return ProfileScreen(loggedInPhone: phoneNumber);
-      },
+      builder: (context, state) => ProfileScreen(),
     ),
   ],
 );

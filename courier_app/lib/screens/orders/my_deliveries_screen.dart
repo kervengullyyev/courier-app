@@ -15,9 +15,7 @@ import '../../services/delivery_service.dart';
 import 'delivery_details_screen.dart';
 
 class MyDeliveriesScreen extends StatefulWidget {
-  final String loggedInPhone;
-  
-  const MyDeliveriesScreen({Key? key, this.loggedInPhone = ''}) : super(key: key);
+  const MyDeliveriesScreen({Key? key}) : super(key: key);
 
   @override
   _MyDeliveriesScreenState createState() => _MyDeliveriesScreenState();
@@ -29,7 +27,15 @@ class _MyDeliveriesScreenState extends State<MyDeliveriesScreen> {
   @override
   void initState() {
     super.initState();
-    _deliveryService.initializeWithSampleData();
+    _bootstrapDeliveries();
+  }
+
+  Future<void> _bootstrapDeliveries() async {
+    await _deliveryService.loadFromPreferences();
+    if (_deliveryService.deliveries.isEmpty) {
+      _deliveryService.initializeWithSampleData();
+    }
+    if (mounted) setState(() {});
   }
 
   @override
@@ -50,7 +56,7 @@ class _MyDeliveriesScreenState extends State<MyDeliveriesScreen> {
             ? _buildEmptyState()
             : _buildDeliveriesList(),
       ),
-      bottomNavigationBar: AppBottomNavigation(currentIndex: 1, loggedInPhone: widget.loggedInPhone),
+      bottomNavigationBar: AppBottomNavigation(currentIndex: 1),
     );
   }
 
@@ -139,7 +145,7 @@ class _MyDeliveriesScreenState extends State<MyDeliveriesScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Header with ID and Status
+                    // Header with ID and Date
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
@@ -151,7 +157,13 @@ class _MyDeliveriesScreenState extends State<MyDeliveriesScreen> {
                             color: AppTheme.textPrimaryColor,
                           ),
                         ),
-                        _buildStatusChip(delivery.status),
+                        Text(
+                          delivery.createdAt,
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: AppTheme.textSecondaryColor,
+                          ),
+                        ),
                       ],
                     ),
                     SizedBox(height: AppTheme.defaultPadding),
@@ -183,13 +195,13 @@ class _MyDeliveriesScreenState extends State<MyDeliveriesScreen> {
                                   width: 32,
                                   height: 32,
                                   decoration: BoxDecoration(
-                                    color: Colors.blue[50],
+                                    color: AppTheme.primaryColor50,
                                     borderRadius: BorderRadius.circular(16),
                                   ),
                                   child: Icon(
                                     Icons.person_outline,
                                     size: 16,
-                                    color: Colors.blue[700],
+                                    color: AppTheme.primaryColor700,
                                   ),
                                 ),
                                 SizedBox(width: AppTheme.smallPadding),
@@ -220,35 +232,6 @@ class _MyDeliveriesScreenState extends State<MyDeliveriesScreen> {
                             ),
                           ),
                         
-                        SizedBox(width: AppTheme.defaultPadding),
-                        
-                        // Date
-                        Row(
-                          crossAxisAlignment: CrossAxisAlignment.center,
-                          children: [
-                            Container(
-                              width: 32,
-                              height: 32,
-                              decoration: BoxDecoration(
-                                color: Colors.grey[50],
-                                borderRadius: BorderRadius.circular(16),
-                              ),
-                              child: Icon(
-                                Icons.calendar_today_outlined,
-                                size: 16,
-                                color: AppTheme.textSecondaryColor,
-                              ),
-                            ),
-                            SizedBox(width: AppTheme.smallPadding),
-                            Text(
-                              delivery.createdAt,
-                              style: TextStyle(
-                                fontSize: 14,
-                                color: AppTheme.textSecondaryColor,
-                              ),
-                            ),
-                          ],
-                        ),
                       ],
                     ),
                   ],
@@ -261,59 +244,6 @@ class _MyDeliveriesScreenState extends State<MyDeliveriesScreen> {
     );
   }
 
-  Widget _buildStatusChip(String status) {
-    Color backgroundColor;
-    Color textColor;
-    IconData icon;
-    
-    switch (status.toLowerCase()) {
-      case 'pending':
-        backgroundColor = Colors.orange[50]!;
-        textColor = Colors.orange[700]!;
-        icon = Icons.schedule;
-        break;
-      case 'in transit':
-        backgroundColor = Colors.blue[50]!;
-        textColor = Colors.blue[700]!;
-        icon = Icons.local_shipping;
-        break;
-      case 'delivered':
-        backgroundColor = Colors.green[50]!;
-        textColor = Colors.green[700]!;
-        icon = Icons.check_circle;
-        break;
-      default:
-        backgroundColor = Colors.grey[50]!;
-        textColor = Colors.grey[700]!;
-        icon = Icons.help_outline;
-    }
-    
-    return Container(
-      padding: EdgeInsets.symmetric(
-        horizontal: AppTheme.smallPadding,
-        vertical: 4,
-      ),
-      decoration: BoxDecoration(
-        color: backgroundColor,
-        borderRadius: BorderRadius.circular(AppTheme.smallBorderRadius),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 16, color: textColor),
-          SizedBox(width: 4),
-          Text(
-            status,
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w500,
-              color: textColor,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
 
   Widget _buildAddressRow({
     required IconData icon,

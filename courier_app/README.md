@@ -1,6 +1,6 @@
-# Courier App
+# TizGo App
 
-A simple Flutter courier delivery app with 3 main screens.
+A simple Flutter delivery service app with 3 main screens.
 
 ## 📱 App Structure
 

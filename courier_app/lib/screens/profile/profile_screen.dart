@@ -15,9 +15,7 @@ import '../../theme/app_theme.dart';
 import '../../services/user_service.dart';
 
 class ProfileScreen extends StatefulWidget {
-  final String loggedInPhone;
-  
-  const ProfileScreen({Key? key, this.loggedInPhone = ''}) : super(key: key);
+  const ProfileScreen({Key? key}) : super(key: key);
 
   @override
   _ProfileScreenState createState() => _ProfileScreenState();
@@ -28,9 +26,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
   final TextEditingController _phoneController = TextEditingController();
   final UserService _userService = UserService();
 
-  // User data with logged-in phone
+  // User data with saved phone
   Map<String, dynamic> get _userProfile => {
-    'phone': _savedPhoneNumber.isNotEmpty ? '+40$_savedPhoneNumber' : '+40${widget.loggedInPhone}',
+    'phone': _savedPhoneNumber.isNotEmpty ? '+993$_savedPhoneNumber' : '+993',
   };
 
   @override
@@ -43,7 +41,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final savedPhone = await _userService.getPhoneNumber();
     setState(() {
       _savedPhoneNumber = savedPhone ?? '';
-      _phoneController.text = _userProfile['phone'];
+      // For the controller, we only want the digits part (without +993)
+      _phoneController.text = _savedPhoneNumber;
     });
   }
 
@@ -57,7 +56,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
     showDialog(
       context: context,
       builder: (BuildContext context) {
-        controller.text = currentValue;
+        controller.text = field.toLowerCase().contains('phone') 
+          ? currentValue.replaceAll('+993', '') 
+          : currentValue;
         return AlertDialog(
           backgroundColor: Colors.white,
           shape: RoundedRectangleBorder(
@@ -71,12 +72,51 @@ class _ProfileScreenState extends State<ProfileScreen> {
               color: AppTheme.textPrimaryColor,
             ),
           ),
-          content: TextField(
-            controller: controller,
-            decoration: AppTheme.inputDecoration.copyWith(
-              hintText: 'Enter $field',
-            ),
-          ),
+          content: field.toLowerCase().contains('phone') 
+            ? TextFormField(
+                controller: controller,
+                keyboardType: TextInputType.phone,
+                inputFormatters: [
+                  FilteringTextInputFormatter.digitsOnly,
+                  LengthLimitingTextInputFormatter(8),
+                ],
+                decoration: InputDecoration(
+                  hintText: 'Phone Number',
+                  prefixIcon: IntrinsicHeight(
+                    child: Padding(
+                      padding: EdgeInsets.only(left: 16, right: 6),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          Text(
+                            '+993',
+                            style: TextStyle(
+                              fontSize: 16,
+                              color: Colors.black,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    borderSide: BorderSide(color: Colors.grey[300]!, width: 1.6),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    borderSide: BorderSide(color: AppTheme.primaryColor, width: 1.6),
+                  ),
+                  contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                ),
+              )
+            : TextField(
+                controller: controller,
+                decoration: AppTheme.inputDecoration.copyWith(
+                  hintText: 'Enter $field',
+                ),
+              ),
           actions: [
             TextButton(
               onPressed: () => Navigator.of(context).pop(),
@@ -89,10 +129,39 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ),
             ),
             TextButton(
-              onPressed: () {
+              onPressed: () async {
+                if (field.toLowerCase().contains('phone')) {
+                  // Validate phone number length
+                  if (controller.text.length != 8) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('Phone number must be exactly 8 digits'),
+                        backgroundColor: Colors.red[600],
+                        behavior: SnackBarBehavior.floating,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(AppTheme.defaultBorderRadius),
+                        ),
+                      ),
+                    );
+                    return;
+                  }
+                }
+                
                 setState(() {
-                  _userProfile[field.toLowerCase().replaceAll(' ', '_')] = controller.text;
+                  if (field.toLowerCase().contains('phone')) {
+                    // For phone numbers, save only the digits part
+                    _savedPhoneNumber = controller.text;
+                    _userProfile['phone'] = '+993${controller.text}';
+                  } else {
+                    _userProfile[field.toLowerCase().replaceAll(' ', '_')] = controller.text;
+                  }
                 });
+                
+                // Actually save to SharedPreferences
+                if (field.toLowerCase().contains('phone')) {
+                  await _userService.savePhoneNumber(controller.text);
+                }
+                
                 Navigator.of(context).pop();
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(
@@ -108,7 +177,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               child: Text(
                 'Save',
                 style: TextStyle(
-                  color: Colors.blue[700],
+                  color: AppTheme.primaryColor700,
                   fontWeight: FontWeight.bold,
                 ),
               ),
@@ -117,274 +186,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
         );
       },
     );
-  }
-
-  void _showHelpDialog() {
-    showDialog(
-      context: context,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          backgroundColor: Colors.white,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(AppTheme.defaultBorderRadius),
-          ),
-          title: Row(
-            children: [
-              Container(
-                width: 40,
-                height: 40,
-                decoration: BoxDecoration(
-                  color: Colors.blue[50],
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: Center(
-                  child: Icon(
-                    Icons.help_outline,
-                    size: 20,
-                    color: Colors.blue[700],
-                  ),
-                ),
-              ),
-              SizedBox(width: AppTheme.smallPadding),
-              Expanded(
-                child: Text(
-                  'Help & Support',
-                  style: TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                    color: AppTheme.textPrimaryColor,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                'Need assistance? Contact our support team:',
-                style: TextStyle(
-                  fontSize: 16,
-                  color: AppTheme.textSecondaryColor,
-                ),
-              ),
-              SizedBox(height: AppTheme.defaultPadding),
-              Container(
-                padding: const EdgeInsets.all(AppTheme.defaultPadding),
-                decoration: BoxDecoration(
-                  color: Colors.grey[50],
-                  borderRadius: BorderRadius.circular(AppTheme.defaultBorderRadius),
-                ),
-                child: Row(
-                  children: [
-                    Icon(
-                      Icons.phone,
-                      color: Colors.blue[700],
-                      size: 24,
-                    ),
-                    SizedBox(width: AppTheme.smallPadding),
-                    Text(
-                      '+40741302753',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                        color: AppTheme.textPrimaryColor,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: Text(
-                'Close',
-                style: TextStyle(
-                  color: AppTheme.textSecondaryColor,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-            ),
-            ElevatedButton.icon(
-              onPressed: () async {
-                const phoneNumber = '+40741302753';
-                final Uri phoneUri = Uri.parse('tel:$phoneNumber');
-                
-                try {
-                  // Check if we can launch the URL
-                  final bool canLaunch = await canLaunchUrl(phoneUri);
-                  
-                  if (canLaunch) {
-                    // Launch the phone app
-                    final bool launched = await launchUrl(
-                      phoneUri,
-                      mode: LaunchMode.externalApplication,
-                    );
-                    
-                    if (!launched) {
-                      throw Exception('Failed to launch phone app');
-                    }
-                  } else {
-                    // Try alternative method - copy to clipboard
-                    await Clipboard.setData(ClipboardData(text: phoneNumber));
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text('Phone app not available. Number copied to clipboard: $phoneNumber'),
-                        backgroundColor: Colors.orange[600],
-                        behavior: SnackBarBehavior.floating,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(AppTheme.defaultBorderRadius),
-                        ),
-                        duration: Duration(seconds: 3),
-                      ),
-                    );
-                  }
-                } catch (e) {
-                  // Copy number to clipboard as fallback
-                  await Clipboard.setData(ClipboardData(text: phoneNumber));
-                  
-                  // Show error message
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text('Could not make phone call. Number copied to clipboard: $phoneNumber'),
-                      backgroundColor: Colors.red[600],
-                      behavior: SnackBarBehavior.floating,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(AppTheme.defaultBorderRadius),
-                      ),
-                      duration: Duration(seconds: 4),
-                    ),
-                  );
-                }
-                
-                Navigator.of(context).pop();
-              },
-              icon: Icon(Icons.phone, size: 18),
-              label: Text('Call'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.blue[700],
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(AppTheme.defaultBorderRadius),
-                ),
-                padding: EdgeInsets.symmetric(
-                  horizontal: AppTheme.defaultPadding,
-                  vertical: AppTheme.smallPadding,
-                ),
-              ),
-            ),
-          ],
-        );
-      },
-    );
-  }
-
-  void _showLogoutDialog() {
-    showDialog(
-      context: context,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          backgroundColor: Colors.white,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(AppTheme.defaultBorderRadius),
-          ),
-          title: Row(
-            children: [
-              Container(
-                width: 40,
-                height: 40,
-                decoration: BoxDecoration(
-                  color: Colors.red[50],
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: Center(
-                  child: Icon(
-                    Icons.logout,
-                    size: 20,
-                    color: Colors.red[700],
-                  ),
-                ),
-              ),
-              SizedBox(width: AppTheme.smallPadding),
-              Expanded(
-                child: Text(
-                  'Logout',
-                  style: TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                    color: AppTheme.textPrimaryColor,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          content: Text(
-            'Are you sure you want to logout? You will need to verify your phone number again to access the app.',
-            style: TextStyle(
-              fontSize: 16,
-              color: AppTheme.textSecondaryColor,
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: Text(
-                'Cancel',
-                style: TextStyle(
-                  color: AppTheme.textSecondaryColor,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-            ),
-            ElevatedButton(
-              onPressed: () {
-                Navigator.of(context).pop();
-                _performLogout();
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.red[700],
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(AppTheme.defaultBorderRadius),
-                ),
-                padding: EdgeInsets.symmetric(
-                  horizontal: AppTheme.defaultPadding,
-                  vertical: AppTheme.smallPadding,
-                ),
-              ),
-              child: Text(
-                'Logout',
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ),
-          ],
-        );
-      },
-    );
-  }
-
-  void _performLogout() async {
-    // Clear saved phone number
-    await _userService.clearPhoneNumber();
-    
-    // Show logout confirmation
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('Logged out successfully'),
-        backgroundColor: Colors.green[600],
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(AppTheme.defaultBorderRadius),
-        ),
-      ),
-    );
-
-    // Navigate back to main screen
-    context.go('/create-delivery');
   }
 
   @override
@@ -394,42 +195,65 @@ class _ProfileScreenState extends State<ProfileScreen> {
       appBar: AppBar(
         backgroundColor: Colors.white,
         elevation: 0,
-        title: const Text('Profile', style: AppTheme.headerStyle),
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Colors.black),
-          onPressed: () => context.go('/create-delivery', extra: {'phone': widget.loggedInPhone}),
-        ),
+        title: Text('Profile', style: AppTheme.headerStyle),
+        leading: const Icon(Icons.person, color: AppTheme.primaryColor, size: 28),
       ),
       body: SafeArea(
         child: SingleChildScrollView(
           child: Column(
             children: [
-            // Profile Header
-            Container(
-              margin: const EdgeInsets.fromLTRB(AppTheme.defaultPadding, AppTheme.defaultPadding, AppTheme.defaultPadding, AppTheme.defaultPadding),
-              padding: const EdgeInsets.all(AppTheme.largePadding),
-              decoration: AppTheme.cardDecoration,
-              child: Column(
-                children: [
-                  Text(
-                    'Profile',
-                    style: TextStyle(
-                      fontSize: 24,
-                      fontWeight: FontWeight.bold,
-                      color: AppTheme.textPrimaryColor,
-                    ),
+              // Profile Header
+              Container(
+                margin: const EdgeInsets.fromLTRB(AppTheme.defaultPadding, AppTheme.defaultPadding, AppTheme.defaultPadding, 0),
+                decoration: AppTheme.cardDecoration,
+                child: Padding(
+                  padding: const EdgeInsets.all(AppTheme.defaultPadding),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 60,
+                        height: 60,
+                        decoration: BoxDecoration(
+                          color: AppTheme.primaryColor50,
+                          borderRadius: BorderRadius.circular(30),
+                        ),
+                        child: Center(
+                          child: Icon(
+                            Icons.person,
+                            size: 30,
+                            color: AppTheme.primaryColor700,
+                          ),
+                        ),
+                      ),
+                      SizedBox(width: AppTheme.defaultPadding),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'TizGo User',
+                              style: TextStyle(
+                                fontSize: 20,
+                                fontWeight: FontWeight.bold,
+                                color: AppTheme.textPrimaryColor,
+                              ),
+                            ),
+                            SizedBox(height: 4),
+                            Text(
+                              'Delivery Service',
+                              style: TextStyle(
+                                fontSize: 14,
+                                color: AppTheme.textSecondaryColor,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
                   ),
-                  SizedBox(height: AppTheme.smallPadding),
-                  Text(
-                    'Manage your profile information',
-                    style: TextStyle(
-                      fontSize: 14,
-                      color: AppTheme.textSecondaryColor,
-                    ),
-                  ),
-                ],
+                ),
               ),
-            ),
             
             SizedBox(height: AppTheme.defaultPadding),
             
@@ -474,12 +298,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ),
             ),
             
-            SizedBox(height: AppTheme.largePadding),
+            SizedBox(height: AppTheme.defaultPadding),
             ],
           ),
         ),
       ),
-      bottomNavigationBar: AppBottomNavigation(currentIndex: 2, loggedInPhone: widget.loggedInPhone),
+      bottomNavigationBar: AppBottomNavigation(currentIndex: 2),
     );
   }
 
@@ -501,14 +325,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
               width: 40,
               height: 40,
               decoration: BoxDecoration(
-                color: Colors.blue[50],
+                color: AppTheme.primaryColor50,
                 borderRadius: BorderRadius.circular(20),
               ),
               child: Center(
                 child: Icon(
                   icon,
                   size: 20,
-                  color: Colors.blue[700],
+                  color: AppTheme.primaryColor700,
                 ),
               ),
             ),
@@ -531,41 +355,22 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     style: TextStyle(
                       fontSize: 16,
                       color: AppTheme.textPrimaryColor,
-                      fontWeight: FontWeight.w500,
+                      fontWeight: FontWeight.w600,
                     ),
                   ),
                 ],
               ),
             ),
-            Container(
-              width: 32,
-              height: 32,
-              decoration: BoxDecoration(
-                color: Colors.grey[50],
-                borderRadius: BorderRadius.circular(16),
-              ),
-              child: Center(
-                child: Icon(
-                  Icons.edit_outlined,
-                  size: 16,
-                  color: AppTheme.textSecondaryColor,
-                ),
-              ),
+            Icon(
+              Icons.edit,
+              size: 20,
+              color: AppTheme.textSecondaryColor,
             ),
           ],
         ),
       ),
     );
   }
-
-  Widget _buildDivider() {
-    return Container(
-      margin: EdgeInsets.symmetric(horizontal: 16),
-      height: 1,
-      color: Colors.grey[200],
-    );
-  }
-
 
   Widget _buildActionButton({
     required IconData icon,
@@ -581,20 +386,19 @@ class _ProfileScreenState extends State<ProfileScreen> {
         child: Padding(
           padding: const EdgeInsets.all(AppTheme.defaultPadding),
           child: Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
               Container(
                 width: 40,
                 height: 40,
                 decoration: BoxDecoration(
-                  color: isDestructive ? Colors.red[50] : Colors.blue[50],
+                  color: isDestructive ? Colors.red[50] : AppTheme.primaryColor50,
                   borderRadius: BorderRadius.circular(20),
                 ),
                 child: Center(
                   child: Icon(
                     icon,
                     size: 20,
-                    color: isDestructive ? Colors.red[700] : Colors.blue[700],
+                    color: isDestructive ? Colors.red[600] : AppTheme.primaryColor700,
                   ),
                 ),
               ),
@@ -604,24 +408,133 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   title,
                   style: TextStyle(
                     fontSize: 16,
-                    fontWeight: FontWeight.w500,
-                    color: isDestructive ? Colors.red[700] : AppTheme.textPrimaryColor,
+                    color: isDestructive ? Colors.red[600] : AppTheme.textPrimaryColor,
+                    fontWeight: FontWeight.w600,
                   ),
                 ),
               ),
-              Container(
-                width: 32,
-                height: 32,
-                decoration: BoxDecoration(
-                  color: Colors.grey[50],
-                  borderRadius: BorderRadius.circular(16),
+              Icon(
+                Icons.arrow_forward_ios,
+                size: 16,
+                color: AppTheme.textSecondaryColor,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDivider() {
+    return Container(
+      margin: EdgeInsets.symmetric(horizontal: AppTheme.defaultPadding),
+      height: 1,
+      color: Colors.grey[200],
+    );
+  }
+
+  void _showHelpDialog() {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          backgroundColor: Colors.white,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(AppTheme.defaultBorderRadius),
+          ),
+          title: Text(
+            'Help & Support',
+            style: TextStyle(
+              fontSize: 20,
+              fontWeight: FontWeight.bold,
+              color: AppTheme.textPrimaryColor,
+            ),
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Need help? Contact our support team:',
+                style: TextStyle(
+                  fontSize: 16,
+                  color: AppTheme.textPrimaryColor,
                 ),
-                child: Center(
-                  child: Icon(
-                    Icons.arrow_forward_ios,
-                    size: 16,
-                    color: AppTheme.textSecondaryColor,
-                  ),
+              ),
+              SizedBox(height: 16),
+              _buildContactOption(
+                icon: Icons.phone,
+                title: 'Call Support',
+                subtitle: '+993741302753',
+                onTap: () => _makePhoneCall('+993741302753'),
+              ),
+              SizedBox(height: 12),
+              _buildContactOption(
+                icon: Icons.email,
+                title: 'Email Support',
+                subtitle: 'support@tizgo.com',
+                onTap: () => _sendEmail('support@tizgo.com'),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: Text(
+                'Close',
+                style: TextStyle(
+                  color: AppTheme.primaryColor700,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildContactOption({
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    required VoidCallback onTap,
+  }) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(8),
+        child: Padding(
+          padding: const EdgeInsets.all(8),
+          child: Row(
+            children: [
+              Icon(
+                icon,
+                size: 20,
+                color: AppTheme.primaryColor700,
+              ),
+              SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: AppTheme.textPrimaryColor,
+                      ),
+                    ),
+                    Text(
+                      subtitle,
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: AppTheme.textSecondaryColor,
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ],
@@ -629,5 +542,114 @@ class _ProfileScreenState extends State<ProfileScreen> {
         ),
       ),
     );
+  }
+
+  void _showLogoutDialog() {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          backgroundColor: Colors.white,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(AppTheme.defaultBorderRadius),
+          ),
+          title: Text(
+            'Logout',
+            style: TextStyle(
+              fontSize: 20,
+              fontWeight: FontWeight.bold,
+              color: AppTheme.textPrimaryColor,
+            ),
+          ),
+          content: Text(
+            'Are you sure you want to logout?',
+            style: TextStyle(
+              fontSize: 16,
+              color: AppTheme.textPrimaryColor,
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: Text(
+                'Cancel',
+                style: TextStyle(
+                  color: AppTheme.textSecondaryColor,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ),
+            TextButton(
+              onPressed: () async {
+                // Clear saved data
+                await _userService.clearPhoneNumber();
+                
+                // Navigate to home screen
+                context.go('/create-delivery');
+                
+                // Show logout message
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('Logged out successfully'),
+                    backgroundColor: Colors.green[600],
+                    behavior: SnackBarBehavior.floating,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(AppTheme.defaultBorderRadius),
+                    ),
+                  ),
+                );
+              },
+              child: Text(
+                'Logout',
+                style: TextStyle(
+                  color: Colors.red[600],
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<void> _makePhoneCall(String phoneNumber) async {
+    final Uri phoneUri = Uri(scheme: 'tel', path: phoneNumber);
+    if (await canLaunchUrl(phoneUri)) {
+      await launchUrl(phoneUri);
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Could not make phone call'),
+          backgroundColor: Colors.red[600],
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(AppTheme.defaultBorderRadius),
+          ),
+        ),
+      );
+    }
+  }
+
+  Future<void> _sendEmail(String email) async {
+    final Uri emailUri = Uri(
+      scheme: 'mailto',
+      path: email,
+      query: 'subject=TizGo Support Request',
+    );
+    if (await canLaunchUrl(emailUri)) {
+      await launchUrl(emailUri);
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Could not open email client'),
+          backgroundColor: Colors.red[600],
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(AppTheme.defaultBorderRadius),
+          ),
+        ),
+      );
+    }
   }
 }

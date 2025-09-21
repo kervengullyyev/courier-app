@@ -7,20 +7,17 @@
 // ============================================================================
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:go_router/go_router.dart';
-import 'package:flutter/services.dart';
-import 'package:connectivity_plus/connectivity_plus.dart';
 import '../../widgets/app_bottom_navigation.dart';
 import '../../theme/app_theme.dart';
 import '../../models/delivery.dart';
 import '../../services/delivery_service.dart';
 
 class CreateDeliveryScreen extends StatefulWidget {
-  final String loggedInPhone;
-  
-  const CreateDeliveryScreen({Key? key, this.loggedInPhone = ''}) : super(key: key);
+  const CreateDeliveryScreen({Key? key}) : super(key: key);
 
   @override
   _CreateDeliveryScreenState createState() => _CreateDeliveryScreenState();
@@ -37,7 +34,6 @@ class _CreateDeliveryScreenState extends State<CreateDeliveryScreen> {
   final _senderNameController = TextEditingController();
   final _senderPhoneController = TextEditingController();
   final FocusNode _senderNameFocus = FocusNode();
-  final Connectivity _connectivity = Connectivity();
   final DeliveryService _deliveryService = DeliveryService();
   
   String _selectedServiceType = 'city'; // 'city' or 'region'
@@ -47,25 +43,16 @@ class _CreateDeliveryScreenState extends State<CreateDeliveryScreen> {
   String _selectedDeliveryLocation = ''; // Selected delivery location name
   bool _isPickupSelected = false; // Track if pickup button is clicked
   bool _isDeliverySelected = false; // Track if delivery button is clicked
-  bool _isOnline = false; // Track online/offline status based on connectivity
-  int _totalMessageCharCount = 0; // Track total message character count
-  static const int _maxMessageLength = 144; // Maximum SMS message length
+  bool _isProcessing = false; // Track if delivery is being processed
   int get _totalPrice => _selectedServiceType == 'city' ? 15 : 35;
   static const String _sheetsWebhookUrl = String.fromEnvironment(
     'SHEETS_WEBHOOK_URL',
-    defaultValue: 'https://script.google.com/macros/s/AKfycbz34fy01-A18cTsuZuCJGLANX_iLahIATPXfObe4_0lH9iFq-lvtvK3WpFH_DVD-PSO/exec',
+    defaultValue: 'https://script.google.com/macros/s/AKfycbxwU7kCgxVhFdEQ3gxoJ19Y79EjPYPyTvale7xgjg6qQC77ZXUQxqSL71vHbp--6CXJug/exec',
   );
 
   @override
   void initState() {
     super.initState();
-    _checkConnectivity();
-    _connectivity.onConnectivityChanged.listen(_updateConnectivityStatus);
-    _descriptionController.addListener(_updateTotalMessageCharCount);
-    _senderNameController.addListener(_updateTotalMessageCharCount);
-    _senderPhoneController.addListener(_updateTotalMessageCharCount);
-    _recipientNameController.addListener(_updateTotalMessageCharCount);
-    _recipientPhoneController.addListener(_updateTotalMessageCharCount);
   }
 
   @override
@@ -81,85 +68,8 @@ class _CreateDeliveryScreenState extends State<CreateDeliveryScreen> {
     super.dispose();
   }
 
-  Future<void> _checkConnectivity() async {
-    try {
-      final connectivityResult = await _connectivity.checkConnectivity();
-      _updateConnectivityStatus(connectivityResult);
-    } catch (e) {
-      print('Connectivity check error: $e');
-      setState(() {
-        _isOnline = false;
-      });
-    }
-  }
 
-  void _updateConnectivityStatus(ConnectivityResult connectivityResult) {
-    setState(() {
-      _isOnline = connectivityResult == ConnectivityResult.mobile ||
-                  connectivityResult == ConnectivityResult.wifi ||
-                  connectivityResult == ConnectivityResult.ethernet;
-    });
-  }
 
-  void _updateTotalMessageCharCount() {
-    setState(() {
-      _totalMessageCharCount = _getTotalMessageLength();
-    });
-  }
-
-  int _getTotalMessageLength() {
-    String message = _createDeliveryMessage();
-    return message.length;
-  }
-
-  bool _isMessageTooLong() {
-    return _getTotalMessageLength() > _maxMessageLength;
-  }
-
-  int _getMaxPackageInfoLength() {
-    // Calculate the base message length without package info
-    int baseMessageLength = _getBaseMessageLength();
-    int remainingChars = _maxMessageLength - baseMessageLength;
-    return remainingChars > 0 ? remainingChars : 0;
-  }
-
-  int _getBaseMessageLength() {
-    // Service type: 1 for city, 2 for inter city
-    String serviceCode = _selectedServiceType == 'city' ? '1' : '2';
-    
-    // Pickup: 1 for easybox, 2 for address + location without vowels
-    String pickupCode = _selectedPickupType == 'easybox' ? '1' : '2';
-    String pickupLocation = _selectedPickupLocation.isNotEmpty ? _removeVowels(_selectedPickupLocation) : '';
-    String pickupInfo = pickupLocation.isNotEmpty ? '$pickupCode-$pickupLocation' : '$pickupCode-';
-    
-    // Delivery: 1 for easybox, 2 for address + location without vowels
-    String deliveryCode = _selectedDeliveryType == 'easybox' ? '1' : '2';
-    String deliveryLocation = _selectedDeliveryLocation.isNotEmpty ? _removeVowels(_selectedDeliveryLocation) : '';
-    String deliveryInfo = deliveryLocation.isNotEmpty ? '$deliveryCode-$deliveryLocation' : '$deliveryCode-';
-    
-    // Sender info
-    String senderName = _senderNameController.text.isNotEmpty ? _senderNameController.text : '';
-    String senderPhone = _senderPhoneController.text.isNotEmpty ? _senderPhoneController.text : '';
-    String senderInfo = senderName.isNotEmpty && senderPhone.isNotEmpty ? '$senderName/$senderPhone' : '';
-    
-    // Recipient info
-    String recipientName = _recipientNameController.text.isNotEmpty ? _recipientNameController.text : '';
-    String recipientPhone = _recipientPhoneController.text.isNotEmpty ? _recipientPhoneController.text : '';
-    String recipientInfo = recipientName.isNotEmpty && recipientPhone.isNotEmpty ? '$recipientName/$recipientPhone' : '';
-    
-    // Price
-    String price = '$_totalPrice man';
-    
-    String baseMessage = '''$serviceCode
-$pickupInfo
-$deliveryInfo
-$senderInfo
-$recipientInfo
-
-$price''';
-    
-    return baseMessage.length;
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -168,35 +78,8 @@ $price''';
       appBar: AppBar(
         backgroundColor: Colors.white,
         elevation: 0,
-        title: Row(
-          children: [
-            Expanded(
-              child: Text('Courier Service', style: AppTheme.headerStyle),
-            ),
-            Row(
-              children: [
-                Container(
-                  width: 8,
-                  height: 8,
-                  decoration: BoxDecoration(
-                    color: _isOnline ? Colors.green : Colors.red,
-                    shape: BoxShape.circle,
-                  ),
-                ),
-                SizedBox(width: 6),
-                Text(
-                  _isOnline ? 'Online' : 'Offline',
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w500,
-                    color: _isOnline ? Colors.green : Colors.red,
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
-        leading: const Icon(Icons.local_shipping, color: Colors.blue, size: 28),
+        title: Text('TizGo Service', style: AppTheme.headerStyle),
+        leading: const Icon(Icons.local_shipping, color: AppTheme.primaryColor, size: 28),
       ),
       body: SafeArea(
         child: Column(
@@ -250,10 +133,10 @@ $price''';
                       child: Container(
                         padding: EdgeInsets.symmetric(vertical: 8),
                         decoration: BoxDecoration(
-                          color: _selectedServiceType == 'city' ? Colors.blue : Colors.grey[200],
+                          color: _selectedServiceType == 'city' ? AppTheme.primaryColor : Colors.grey[200],
                           borderRadius: BorderRadius.circular(8),
                           border: Border.all(
-                            color: _selectedServiceType == 'city' ? Colors.blue : Colors.grey[300]!,
+                            color: _selectedServiceType == 'city' ? AppTheme.primaryColor : Colors.grey[300]!,
                             width: 1.6,
                           ),
                         ),
@@ -279,10 +162,10 @@ $price''';
                       child: Container(
                         padding: EdgeInsets.symmetric(vertical: 8),
                         decoration: BoxDecoration(
-                          color: _selectedServiceType == 'region' ? Colors.blue : Colors.grey[200],
+                          color: _selectedServiceType == 'region' ? AppTheme.primaryColor : Colors.grey[200],
                           borderRadius: BorderRadius.circular(8),
                           border: Border.all(
-                            color: _selectedServiceType == 'region' ? Colors.blue : Colors.grey[300]!,
+                            color: _selectedServiceType == 'region' ? AppTheme.primaryColor : Colors.grey[300]!,
                             width: 1.6,
                           ),
                         ),
@@ -351,10 +234,10 @@ $price''';
                       child: Container(
                         padding: EdgeInsets.symmetric(vertical: 8, horizontal: 16),
                         decoration: BoxDecoration(
-                          color: _selectedPickupLocation.isNotEmpty ? Colors.blue : Colors.grey[200],
+                          color: _selectedPickupLocation.isNotEmpty ? AppTheme.primaryColor : Colors.grey[200],
                           borderRadius: BorderRadius.circular(8),
                           border: Border.all(
-                            color: (_isPickupSelected || _selectedPickupLocation.isNotEmpty) ? Colors.blue : Colors.grey[300]!,
+                            color: (_isPickupSelected || _selectedPickupLocation.isNotEmpty) ? AppTheme.primaryColor : Colors.grey[300]!,
                             width: 1.6,
                           ),
                         ),
@@ -364,7 +247,7 @@ $price''';
                             Icon(
                               _selectedPickupType == 'easybox' ? Icons.grid_view : Icons.home,
                               size: 16,
-                              color: _selectedPickupLocation.isNotEmpty ? Colors.white : Colors.blue,
+                              color: _selectedPickupLocation.isNotEmpty ? Colors.white : AppTheme.primaryColor,
                             ),
                             SizedBox(width: 8),
                             Flexible(
@@ -418,10 +301,10 @@ $price''';
                       child: Container(
                         padding: EdgeInsets.symmetric(vertical: 8, horizontal: 16),
                         decoration: BoxDecoration(
-                          color: _selectedDeliveryLocation.isNotEmpty ? Colors.blue : Colors.grey[200],
+                          color: _selectedDeliveryLocation.isNotEmpty ? AppTheme.primaryColor : Colors.grey[200],
                           borderRadius: BorderRadius.circular(8),
                           border: Border.all(
-                            color: (_isDeliverySelected || _selectedDeliveryLocation.isNotEmpty) ? Colors.blue : Colors.grey[300]!,
+                            color: (_isDeliverySelected || _selectedDeliveryLocation.isNotEmpty) ? AppTheme.primaryColor : Colors.grey[300]!,
                             width: 1.6,
                           ),
                         ),
@@ -431,7 +314,7 @@ $price''';
                             Icon(
                               _selectedDeliveryType == 'easybox' ? Icons.grid_view : Icons.home,
                               size: 16,
-                              color: _selectedDeliveryLocation.isNotEmpty ? Colors.white : Colors.blue,
+                              color: _selectedDeliveryLocation.isNotEmpty ? Colors.white : AppTheme.primaryColor,
                             ),
                             SizedBox(width: 8),
                             Flexible(
@@ -516,7 +399,7 @@ $price''';
                       ),
                       focusedBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(8),
-                        borderSide: BorderSide(color: Colors.blue, width: 1.6),
+                        borderSide: BorderSide(color: AppTheme.primaryColor, width: 1.6),
                       ),
                       contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                       counterText: '', // Hide the default counter
@@ -524,49 +407,46 @@ $price''';
                   ),
                   SizedBox(height: 16),
                   // Sender Phone
-                  Row(
-                    children: [
-                      Container(
-                        width: 80,
-                        height: 48,
-                        padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                        decoration: BoxDecoration(
-                          border: Border.all(color: Colors.grey[300]!, width: 1.6),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Center(
-                          child: Text(
-                            '+993',
-                            style: TextStyle(fontWeight: FontWeight.w500, fontSize: 16),
-                          ),
-                        ),
-                      ),
-                      SizedBox(width: 8),
-                      Expanded(
-                        child: TextFormField(
-                          controller: _senderPhoneController,
-                          keyboardType: TextInputType.number,
-                          maxLength: 8,
-                          inputFormatters: [
-                            FilteringTextInputFormatter.digitsOnly,
-                          ],
-                          decoration: InputDecoration(
-                            hintText: 'Sender Phone Number',
-                            hintStyle: TextStyle(fontSize: 16, fontWeight: FontWeight.w500, color: Colors.grey[500]),
-                            enabledBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(8),
-                              borderSide: BorderSide(color: Colors.grey[300]!, width: 1.6),
-                            ),
-                            focusedBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(8),
-                              borderSide: BorderSide(color: Colors.blue, width: 1.6),
-                            ),
-                            contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                            counterText: '', // Hide the default counter
-                          ),
-                        ),
-                      ),
+                  TextFormField(
+                    controller: _senderPhoneController,
+                    keyboardType: TextInputType.number,
+                    maxLength: 8,
+                    inputFormatters: [
+                      FilteringTextInputFormatter.digitsOnly,
                     ],
+                    decoration: InputDecoration(
+                      hintText: 'Sender Phone Number',
+                      prefixIcon: IntrinsicHeight(
+                        child: Padding(
+                          padding: EdgeInsets.only(left: 16, right: 6),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            crossAxisAlignment: CrossAxisAlignment.center,
+                            children: [
+                              Text(
+                                '+993',
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  // fontWeight: FontWeight.w500,
+                                  color: Colors.black,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      hintStyle: TextStyle(fontSize: 16, fontWeight: FontWeight.w500, color: Colors.grey[500]),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide: BorderSide(color: Colors.grey[300]!, width: 1.6),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide: BorderSide(color: AppTheme.primaryColor, width: 1.6),
+                      ),
+                      contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                      counterText: '', // Hide the default counter
+                    ),
                   ),
                 ],
               ),
@@ -623,7 +503,7 @@ $price''';
                       ),
                       focusedBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(8),
-                        borderSide: BorderSide(color: Colors.blue, width: 1.6),
+                        borderSide: BorderSide(color: AppTheme.primaryColor, width: 1.6),
                       ),
                       contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                       counterText: '', // Hide the default counter
@@ -639,55 +519,52 @@ $price''';
                   SizedBox(height: 16),
                   
                   // Phone Number
-                  Row(
-                    children: [
-                      Container(
-                        width: 80,
-                        height: 48,
-                        padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                        decoration: BoxDecoration(
-                          border: Border.all(color: Colors.grey[300]!, width: 1.6),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Center(
-                          child: Text(
-                            '+993',
-                            style: TextStyle(fontWeight: FontWeight.w500, fontSize: 16),
-                          ),
-                        ),
-                      ),
-                      SizedBox(width: 8),
-                      Expanded(
-                        child: TextFormField(
-                          controller: _recipientPhoneController,
-                          keyboardType: TextInputType.number,
-                          maxLength: 8,
-                          inputFormatters: [
-                            FilteringTextInputFormatter.digitsOnly,
-                          ],
-                          decoration: InputDecoration(
-                            hintText: 'Recipient Phone Number',
-                            hintStyle: TextStyle(fontSize: 16, fontWeight: FontWeight.w500, color: Colors.grey[500]),
-                            enabledBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(8),
-                              borderSide: BorderSide(color: Colors.grey[300]!, width: 1.6),
-                            ),
-                            focusedBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(8),
-                              borderSide: BorderSide(color: Colors.blue, width: 1.6),
-                            ),
-                            contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                            counterText: '', // Hide the default counter
-                          ),
-                          validator: (value) {
-                            if (value == null || value.isEmpty) {
-                              return 'Please enter phone number';
-                            }
-                            return null;
-                          },
-                        ),
-                      ),
+                  TextFormField(
+                    controller: _recipientPhoneController,
+                    keyboardType: TextInputType.number,
+                    maxLength: 8,
+                    inputFormatters: [
+                      FilteringTextInputFormatter.digitsOnly,
                     ],
+                    decoration: InputDecoration(
+                      hintText: 'Recipient Phone Number',
+                      prefixIcon: IntrinsicHeight(
+                        child: Padding(
+                          padding: EdgeInsets.only(left: 16, right: 6),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            crossAxisAlignment: CrossAxisAlignment.center,
+                            children: [
+                              Text(
+                                '+993',
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  // fontWeight: FontWeight.w500,
+                                  color: Colors.black,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      hintStyle: TextStyle(fontSize: 16, fontWeight: FontWeight.w500, color: Colors.grey[500]),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide: BorderSide(color: Colors.grey[300]!, width: 1.6),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide: BorderSide(color: AppTheme.primaryColor, width: 1.6),
+                      ),
+                      contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                      counterText: '', // Hide the default counter
+                    ),
+                    validator: (value) {
+                      if (value == null || value.isEmpty) {
+                        return 'Please enter phone number';
+                      }
+                      return null;
+                    },
                   ),
                 ],
               ),
@@ -727,48 +604,52 @@ $price''';
                   ),
                 ],
               ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  TextFormField(
-                    controller: _descriptionController,
-                    maxLines: 3,
-                    maxLength: _getMaxPackageInfoLength(),
-                    enabled: !_isMessageTooLong(),
-                    textCapitalization: TextCapitalization.sentences,
-                    decoration: InputDecoration(
-                      hintText: 'Package Information',
-                      hintStyle: TextStyle(fontSize: 16, fontWeight: FontWeight.w500, color: Colors.grey[500]),
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8),
-                        borderSide: BorderSide(color: Colors.grey[300]!, width: 1.6),
+              child: ValueListenableBuilder<TextEditingValue>(
+                valueListenable: _descriptionController,
+                builder: (context, value, child) {
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      TextFormField(
+                        controller: _descriptionController,
+                        maxLines: 3,
+                        maxLength: 200,
+                        textCapitalization: TextCapitalization.sentences,
+                        decoration: InputDecoration(
+                          hintText: 'Package Information',
+                          hintStyle: TextStyle(fontSize: 16, fontWeight: FontWeight.w500, color: Colors.grey[500]),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                            borderSide: BorderSide(color: Colors.grey[300]!, width: 1.6),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                            borderSide: BorderSide(color: AppTheme.primaryColor, width: 1.6),
+                          ),
+                          disabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                            borderSide: BorderSide(color: Colors.red[300]!, width: 1.6),
+                          ),
+                          contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                          suffixText: '${value.text.length}/200',
+                          suffixStyle: TextStyle(
+                            color: value.text.length > 200 ? Colors.red : Colors.grey[600],
+                            fontWeight: FontWeight.bold,
+                          ),
+                          counterText: '', // Hide the default counter
+                        ),
                       ),
-                      focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8),
-                        borderSide: BorderSide(color: Colors.blue, width: 1.6),
-                      ),
-                      disabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8),
-                        borderSide: BorderSide(color: Colors.red[300]!, width: 1.6),
-                      ),
-                      contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                      suffixText: '${_totalMessageCharCount}/$_maxMessageLength',
-                      suffixStyle: TextStyle(
-                        color: _isMessageTooLong() ? Colors.red : Colors.grey[600],
-                        fontWeight: FontWeight.bold,
-                      ),
-                      counterText: '', // Hide the default counter
-                    ),
-                  ),
-                  if (_isMessageTooLong())
-                    Padding(
-                      padding: EdgeInsets.only(top: 8),
-                      child: Text(
-                        'Message exceeds $_maxMessageLength characters! Reduce package info.',
-                        style: TextStyle(color: Colors.red, fontSize: 12),
-                      ),
-                    ),
-                ],
+                      if (value.text.length > 200)
+                        Padding(
+                          padding: EdgeInsets.only(top: 8),
+                          child: Text(
+                            'Message exceeds 200 characters! Reduce package info.',
+                            style: TextStyle(color: Colors.red, fontSize: 12),
+                          ),
+                        ),
+                    ],
+                  );
+                },
               ),
             ),
             
@@ -815,12 +696,29 @@ $price''';
                             height: 48,
                             width: double.infinity,
                             child: ElevatedButton(
-                              onPressed: _createDelivery,
+                              onPressed: _isProcessing ? null : _createDelivery,
                               style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.blue,
+                                backgroundColor: AppTheme.primaryColor,
                                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
                               ),
-                              child: Text('Tassykla', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600)),
+                              child: _isProcessing
+                                  ? Row(
+                                      mainAxisAlignment: MainAxisAlignment.center,
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        SizedBox(
+                                          width: 16,
+                                          height: 16,
+                                          child: CircularProgressIndicator(
+                                            strokeWidth: 2,
+                                            valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                                          ),
+                                        ),
+                                        SizedBox(width: 8),
+                                        Text('Loading...', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600)),
+                                      ],
+                                    )
+                                  : Text('Tassykla', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600)),
                             ),
                           ),
                         ),
@@ -833,7 +731,7 @@ $price''';
           ],
         ),
       ),
-      bottomNavigationBar: AppBottomNavigation(currentIndex: 0, loggedInPhone: widget.loggedInPhone),
+      bottomNavigationBar: AppBottomNavigation(currentIndex: 0),
     );
   }
 
@@ -845,42 +743,13 @@ $price''';
       return; // Stop if validation fails
     }
     
-    // Check message length before sending
-    String message = _createDeliveryMessage();
-    int messageLength = message.length;
-    print('Message length: $messageLength characters'); // Debug log
+    // Set loading state
+    setState(() {
+      _isProcessing = true;
+    });
     
-    if (messageLength > _maxMessageLength) {
-      // Show alert for long message
-      showDialog(
-        context: context,
-        builder: (BuildContext context) {
-          return AlertDialog(
-            title: Text('Long Message Warning'),
-            content: Text('Your message is $messageLength characters long (exceeds $_maxMessageLength characters). This will be sent as multiple SMS messages. Continue?'),
-            actions: [
-              TextButton(
-                onPressed: () {
-                  Navigator.of(context).pop();
-                },
-                child: Text('Cancel'),
-              ),
-              TextButton(
-                onPressed: () async {
-                  Navigator.of(context).pop();
-                  await _proceedWithSMS();
-                },
-                child: Text('Continue'),
-              ),
-            ],
-          );
-        },
-      );
-    } else {
-      // Message is short enough, proceed directly
-      await _proceedWithSMS();
-      _sendDeliveryToGoogleSheets();
-    }
+    // Proceed with data submission
+    await _proceedWithSubmission();
   }
 
   bool _validateRequiredFields() {
@@ -1045,9 +914,14 @@ $price''';
               borderRadius: BorderRadius.circular(16),
               color: Colors.white,
             ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
+            child: ConstrainedBox(
+              constraints: BoxConstraints(
+                maxHeight: MediaQuery.of(context).size.height * 0.8,
+              ),
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
                 // Green success icon
                 Container(
                   margin: EdgeInsets.only(top: 20),
@@ -1070,7 +944,7 @@ $price''';
                 Text(
                   'Successful!',
                   style: TextStyle(
-                    fontSize: 24,
+                    fontSize: 16,
                     fontWeight: FontWeight.bold,
                     color: Colors.black,
                   ),
@@ -1080,28 +954,28 @@ $price''';
                 Text(
                   'Your transaction was successful',
                   style: TextStyle(
-                    fontSize: 16,
+                    fontSize: 14,
                     color: Colors.black,
                   ),
                 ),
-                SizedBox(height: 20),
+                SizedBox(height: 10),
                 // Transaction details
                 Container(
                   margin: EdgeInsets.symmetric(horizontal: 20),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      _buildDetailRow('Service Type:', _selectedServiceType == 'city' ? 'City' : 'Regional'),
-                      _buildDetailRow('Pickup Type:', _selectedPickupType == 'easybox' ? 'EasyBox' : 'Address'),
+                      // _buildDetailRow('Service Type:', _selectedServiceType == 'city' ? 'City' : 'Regional'),
+                      // _buildDetailRow('Pickup Type:', _selectedPickupType == 'easybox' ? 'EasyBox' : 'Address'),
                       _buildDetailRow('Pickup Location:', _selectedPickupLocation.isNotEmpty ? _selectedPickupLocation : 'Not specified'),
-                      _buildDetailRow('Delivery Type:', _selectedDeliveryType == 'easybox' ? 'EasyBox' : 'Address'),
+                      // _buildDetailRow('Delivery Type:', _selectedDeliveryType == 'easybox' ? 'EasyBox' : 'Address'),
                       _buildDetailRow('Delivery Location:', _selectedDeliveryLocation.isNotEmpty ? _selectedDeliveryLocation : 'Not specified'),
                       _buildDetailRow('Sender Full Name:', _senderNameController.text.isNotEmpty ? _senderNameController.text : 'Not specified'),
                       _buildDetailRow('Sender Phone Number:', _senderPhoneController.text.isNotEmpty ? '+993${_senderPhoneController.text}' : 'Not specified'),
                       _buildDetailRow('Recipient Full Name:', _recipientNameController.text.isNotEmpty ? _recipientNameController.text : 'Not specified'),
                       _buildDetailRow('Recipient Phone Number:', _recipientPhoneController.text.isNotEmpty ? '+993${_recipientPhoneController.text}' : 'Not specified'),
                       _buildDetailRow('Package Info:', _descriptionController.text.isNotEmpty ? _descriptionController.text : 'Not specified'),
-                      _buildDetailRow('Total Order:', '$_totalPrice manat', isLast: true),
+                      // _buildDetailRow('Total Order:', '$_totalPrice manat', isLast: true),
                     ],
                   ),
                 ),
@@ -1113,7 +987,6 @@ $price''';
                     child: ElevatedButton(
                       onPressed: () {
                         Navigator.of(context).pop();
-                        _addDeliveryToOrders();
                         context.go('/my-deliveries');
                       },
                     style: ElevatedButton.styleFrom(
@@ -1127,7 +1000,7 @@ $price''';
                       'OK',
                       style: TextStyle(
                         color: Colors.white,
-                        fontSize: 16,
+                        fontSize: 14,
                         fontWeight: FontWeight.bold,
                       ),
                     ),
@@ -1136,7 +1009,9 @@ $price''';
               ],
             ),
           ),
-        );
+        ),
+      ),
+    );
       },
     );
   }
@@ -1151,7 +1026,7 @@ $price''';
             child: Text(
               '$label $value',
               style: TextStyle(
-                fontSize: 14,
+                fontSize: 12,
                 color: Colors.black,
               ),
             ),
@@ -1167,22 +1042,30 @@ $price''';
     );
   }
 
-  Future<void> _proceedWithSMS() async {
+  Future<void> _proceedWithSubmission() async {
     try {
-      // Send SMS to the specified phone number immediately
-      print('Attempting to send SMS...'); // Debug log
-      await _sendSMS();
-      print('SMS sent successfully'); // Debug log
+      // Persist the order immediately
+      _addDeliveryToOrders();
+      
+      // Send data to Google Sheets
+      print('Sending to Google Sheets...');
+      await _sendDeliveryToGoogleSheets();
+      print('Google Sheets data sent successfully');
       
       // Show success dialog
       _showSuccessDialog();
     } catch (e) {
-      print('SMS error: $e'); // Debug log
-      // Show error message if SMS fails
+      print('Send error: $e');
+      // Show error message if sending fails
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('SMS failed: ${e.toString()}')),
+        SnackBar(content: Text('Failed to send: ${e.toString()}')),
       );
       context.go('/my-deliveries');
+    } finally {
+      // Clear loading state
+      setState(() {
+        _isProcessing = false;
+      });
     }
   }
 
@@ -1192,7 +1075,10 @@ $price''';
       return;
     }
 
-    try {
+    // Retry mechanism
+    for (int attempt = 1; attempt <= 3; attempt++) {
+      try {
+        print('Attempt $attempt of 3...');
       final payload = {
         'createdAt': DateTime.now().toIso8601String(),
         'serviceType': _selectedServiceType,
@@ -1201,24 +1087,65 @@ $price''';
         'deliveryType': _selectedDeliveryType,
         'deliveryLocation': _selectedDeliveryLocation,
         'senderName': _senderNameController.text,
-        'senderPhone': _senderPhoneController.text,
+        'senderPhone': '993${_senderPhoneController.text}',
         'recipientName': _recipientNameController.text,
-        'recipientPhone': _recipientPhoneController.text,
+        'recipientPhone': '993${_recipientPhoneController.text}',
         'packageInfo': _descriptionController.text,
         'price': _totalPrice,
       };
+
+      print('Attempting to connect to: $_sheetsWebhookUrl');
+      print('Payload: ${_encodeJson(payload)}');
 
       final response = await http.post(
         Uri.parse(_sheetsWebhookUrl),
         headers: {
           'Content-Type': 'application/json',
+          'User-Agent': 'TizGo/1.0',
         },
         body: _encodeJson(payload),
+      ).timeout(
+        const Duration(seconds: 30),
+        onTimeout: () {
+          print('Request timed out after 30 seconds');
+          throw Exception('Request timeout');
+        },
       );
 
+      print('Sending data to Google Sheets:');
+      print('Payload: ${_encodeJson(payload)}');
       print('Sheets response status: ${response.statusCode}');
-    } catch (e) {
-      print('Failed to send data to Google Sheets: $e');
+      print('Sheets response body: ${response.body}');
+      
+        if (response.statusCode == 200) {
+          print('Google Sheets data sent successfully on attempt $attempt');
+          return; // Success, exit the retry loop
+        } else {
+          print('Google Sheets request failed with status: ${response.statusCode} on attempt $attempt');
+          if (attempt == 3) {
+            print('All 3 attempts failed');
+            return;
+          }
+        }
+      } catch (e) {
+        print('Failed to send data to Google Sheets on attempt $attempt: $e');
+        print('Error type: ${e.runtimeType}');
+        if (e.toString().contains('Failed to fetch')) {
+          print('Network connectivity issue - check internet connection and Google Apps Script URL');
+        } else if (e.toString().contains('timeout')) {
+          print('Request timed out - Google Apps Script might be slow to respond');
+        } else {
+          print('Unknown error occurred');
+        }
+        
+        if (attempt == 3) {
+          print('All 3 attempts failed');
+          return;
+        }
+        
+        // Wait before retrying
+        await Future.delayed(Duration(seconds: 2));
+      }
     }
   }
 
@@ -1226,79 +1153,7 @@ $price''';
     return const JsonEncoder.withIndent('  ').convert(data);
   }
 
-  Future<void> _sendSMS() async {
-    try {
-      print('Starting background SMS sending...'); // Debug log
-      
-      // Create detailed delivery message
-      String message = _createDeliveryMessage();
-      String recipient = '+40741302753';
-      
-      print('Sending SMS to $recipient with message: $message'); // Debug log
-      
-      // Use platform channel to send SMS directly
-      const platform = MethodChannel('com.example.courier_app/sms');
-      
-      final String result = await platform.invokeMethod('sendSMS', {
-        'phoneNumber': recipient,
-        'message': message,
-        'useDivideMessage': true,
-      });
-      
-      print('SMS result: $result'); // Debug log
-      print('SMS sent successfully in background!'); // Debug log
-    } catch (e) {
-      print('Background SMS error: $e'); // Debug log
-      throw Exception('Failed to send SMS in background: $e');
-    }
-  }
 
-  String _createDeliveryMessage() {
-    // Service type: 1 for city, 2 for inter city
-    String serviceCode = _selectedServiceType == 'city' ? '1' : '2';
-    
-    // Pickup: 1 for easybox, 2 for address + location without vowels
-    String pickupCode = _selectedPickupType == 'easybox' ? '1' : '2';
-    String pickupLocation = _selectedPickupLocation.isNotEmpty ? _removeVowels(_selectedPickupLocation) : '';
-    String pickupInfo = pickupLocation.isNotEmpty ? '$pickupCode-$pickupLocation' : '$pickupCode-';
-    
-    // Delivery: 1 for easybox, 2 for address + location without vowels
-    String deliveryCode = _selectedDeliveryType == 'easybox' ? '1' : '2';
-    String deliveryLocation = _selectedDeliveryLocation.isNotEmpty ? _removeVowels(_selectedDeliveryLocation) : '';
-    String deliveryInfo = deliveryLocation.isNotEmpty ? '$deliveryCode-$deliveryLocation' : '$deliveryCode-';
-    
-    // Sender info
-    String senderName = _senderNameController.text.isNotEmpty ? _senderNameController.text : '';
-    String senderPhone = _senderPhoneController.text.isNotEmpty ? _senderPhoneController.text : '';
-    String senderInfo = senderName.isNotEmpty && senderPhone.isNotEmpty ? '$senderName/$senderPhone' : '';
-    
-    // Recipient info
-    String recipientName = _recipientNameController.text.isNotEmpty ? _recipientNameController.text : '';
-    String recipientPhone = _recipientPhoneController.text.isNotEmpty ? _recipientPhoneController.text : '';
-    String recipientInfo = recipientName.isNotEmpty && recipientPhone.isNotEmpty ? '$recipientName/$recipientPhone' : '';
-    
-    // Package info
-    String packageInfo = _descriptionController.text.isNotEmpty ? _descriptionController.text : '';
-    
-    // Price
-    String price = '$_totalPrice man';
-    
-    String message = '''$serviceCode
-$pickupInfo
-$deliveryInfo
-$senderInfo
-$recipientInfo
-$packageInfo
-$price''';
-    
-    print('Complete SMS message: $message'); // Debug log
-    return message.trim();
-  }
-
-  String _removeVowels(String text) {
-    if (text.isEmpty) return '';
-    return text.replaceAll(RegExp(r'[aeiouAEIOU]'), '').toUpperCase();
-  }
 
   void _addDeliveryToOrders() {
     final newDelivery = Delivery(
@@ -1319,7 +1174,7 @@ $price''';
         fullName: _senderNameController.text,
         phoneNumber: '+993${_senderPhoneController.text}',
       ),
-      createdAt: DateTime.now().toString().split(' ')[0], // Today's date
+      createdAt: DateTime.now().toString().split('.')[0].replaceAll('T', ' '), // Full timestamp with hour and minute
       price: _totalPrice.toDouble(),
       serviceType: _selectedServiceType,
       pickupType: _selectedPickupType,
@@ -1331,7 +1186,7 @@ $price''';
           : null,
     );
 
-    _deliveryService.addDelivery(newDelivery);
+    _deliveryService.addAndPersistDelivery(newDelivery);
   }
 
   void _showPickupOptionsDialog() {
@@ -1399,7 +1254,7 @@ $price''';
                                   color: Colors.white,
                                   borderRadius: BorderRadius.circular(12),
                                   border: Border.all(
-                                    color: _selectedPickupType == 'easybox' ? Colors.blue : Colors.grey[300]!,
+                                    color: _selectedPickupType == 'easybox' ? AppTheme.primaryColor : Colors.grey[300]!,
                                     width: 2,
                                   ),
                                 ),
@@ -1412,9 +1267,9 @@ $price''';
                                       height: 24,
                                       decoration: BoxDecoration(
                                         shape: BoxShape.circle,
-                                        color: _selectedPickupType == 'easybox' ? Colors.blue : Colors.transparent,
+                                        color: _selectedPickupType == 'easybox' ? AppTheme.primaryColor : Colors.transparent,
                                         border: Border.all(
-                                          color: _selectedPickupType == 'easybox' ? Colors.blue : Colors.grey[400]!,
+                                          color: _selectedPickupType == 'easybox' ? AppTheme.primaryColor : Colors.grey[400]!,
                                           width: 2,
                                         ),
                                       ),
@@ -1459,7 +1314,7 @@ $price''';
                                     // Icon
                                     Icon(
                                       Icons.grid_view,
-                                      color: Colors.blue,
+                                      color: AppTheme.primaryColor,
                                       size: 24,
                                     ),
                                   ],
@@ -1483,7 +1338,7 @@ $price''';
                                   color: Colors.white,
                                   borderRadius: BorderRadius.circular(12),
                                   border: Border.all(
-                                    color: _selectedPickupType == 'address' ? Colors.blue : Colors.grey[300]!,
+                                    color: _selectedPickupType == 'address' ? AppTheme.primaryColor : Colors.grey[300]!,
                                     width: 2,
                                   ),
                                 ),
@@ -1496,9 +1351,9 @@ $price''';
                                       height: 24,
                                       decoration: BoxDecoration(
                                         shape: BoxShape.circle,
-                                        color: _selectedPickupType == 'address' ? Colors.blue : Colors.transparent,
+                                        color: _selectedPickupType == 'address' ? AppTheme.primaryColor : Colors.transparent,
                                         border: Border.all(
-                                          color: _selectedPickupType == 'address' ? Colors.blue : Colors.grey[400]!,
+                                          color: _selectedPickupType == 'address' ? AppTheme.primaryColor : Colors.grey[400]!,
                                           width: 2,
                                         ),
                                       ),
@@ -1543,7 +1398,7 @@ $price''';
                                     // Icon
                                     Icon(
                                       Icons.home,
-                                      color: Colors.blue,
+                                      color: AppTheme.primaryColor,
                                       size: 24,
                                     ),
                                   ],
@@ -1570,7 +1425,7 @@ $price''';
                                 }
                               : null,
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.blue,
+                            backgroundColor: AppTheme.primaryColor,
                             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
                           ),
                           child: Text(
@@ -1664,7 +1519,7 @@ $price''';
                             value: index,
                             groupValue: selectedIndex,
                             onChanged: (val) => setModalState(() => selectedIndex = val ?? -1),
-                            activeColor: Colors.blue,
+                            activeColor: AppTheme.primaryColor,
                           ),
                           title: Text(
                             location['name']!,
@@ -1697,7 +1552,7 @@ $price''';
                                 Navigator.of(context).pop();
                               },
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.blue,
+                          backgroundColor: AppTheme.primaryColor,
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
                         ),
                         child: Text('Tassyklа', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600)),
@@ -1777,7 +1632,7 @@ $price''';
                                   color: Colors.white,
                                   borderRadius: BorderRadius.circular(12),
                                   border: Border.all(
-                                    color: _selectedDeliveryType == 'easybox' ? Colors.blue : Colors.grey[300]!,
+                                    color: _selectedDeliveryType == 'easybox' ? AppTheme.primaryColor : Colors.grey[300]!,
                                     width: 2,
                                   ),
                                 ),
@@ -1790,9 +1645,9 @@ $price''';
                                       height: 24,
                                       decoration: BoxDecoration(
                                         shape: BoxShape.circle,
-                                        color: _selectedDeliveryType == 'easybox' ? Colors.blue : Colors.transparent,
+                                        color: _selectedDeliveryType == 'easybox' ? AppTheme.primaryColor : Colors.transparent,
                                         border: Border.all(
-                                          color: _selectedDeliveryType == 'easybox' ? Colors.blue : Colors.grey[400]!,
+                                          color: _selectedDeliveryType == 'easybox' ? AppTheme.primaryColor : Colors.grey[400]!,
                                           width: 2,
                                         ),
                                       ),
@@ -1837,7 +1692,7 @@ $price''';
                                     // Icon
                                     Icon(
                                       Icons.grid_view,
-                                      color: Colors.blue,
+                                      color: AppTheme.primaryColor,
                                       size: 24,
                                     ),
                                   ],
@@ -1861,7 +1716,7 @@ $price''';
                                   color: Colors.white,
                                   borderRadius: BorderRadius.circular(12),
                                   border: Border.all(
-                                    color: _selectedDeliveryType == 'address' ? Colors.blue : Colors.grey[300]!,
+                                    color: _selectedDeliveryType == 'address' ? AppTheme.primaryColor : Colors.grey[300]!,
                                     width: 2,
                                   ),
                                 ),
@@ -1874,9 +1729,9 @@ $price''';
                                       height: 24,
                                       decoration: BoxDecoration(
                                         shape: BoxShape.circle,
-                                        color: _selectedDeliveryType == 'address' ? Colors.blue : Colors.transparent,
+                                        color: _selectedDeliveryType == 'address' ? AppTheme.primaryColor : Colors.transparent,
                                         border: Border.all(
-                                          color: _selectedDeliveryType == 'address' ? Colors.blue : Colors.grey[400]!,
+                                          color: _selectedDeliveryType == 'address' ? AppTheme.primaryColor : Colors.grey[400]!,
                                           width: 2,
                                         ),
                                       ),
@@ -1921,7 +1776,7 @@ $price''';
                                     // Icon
                                     Icon(
                                       Icons.home,
-                                      color: Colors.blue,
+                                      color: AppTheme.primaryColor,
                                       size: 24,
                                     ),
                                   ],
@@ -1948,7 +1803,7 @@ $price''';
                                 }
                               : null,
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.blue,
+                            backgroundColor: AppTheme.primaryColor,
                             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
                           ),
                           child: Text(
@@ -2042,7 +1897,7 @@ $price''';
                             value: index,
                             groupValue: selectedIndex,
                             onChanged: (val) => setModalState(() => selectedIndex = val ?? -1),
-                            activeColor: Colors.blue,
+                            activeColor: AppTheme.primaryColor,
                           ),
                           title: Text(
                             location['name']!,
@@ -2074,7 +1929,7 @@ $price''';
                                 Navigator.of(context).pop();
                               },
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.blue,
+                          backgroundColor: AppTheme.primaryColor,
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
                         ),
                         child: Text('Tassyklа', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600)),

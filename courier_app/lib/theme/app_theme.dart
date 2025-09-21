@@ -8,7 +8,9 @@ import 'package:flutter/material.dart';
 
 class AppTheme {
   // Colors
-  static const Color primaryColor = Colors.blue;
+  static const Color primaryColor = Color(0xFF0065F8);
+  static const Color primaryColor50 = Color(0xFFE3F2FD);
+  static const Color primaryColor700 = Color(0xFF1976D2);
   static const Color backgroundColor = Color(0xFFF5F5F5);
   static const Color cardBackgroundColor = Colors.white;
   static const Color textPrimaryColor = Colors.black;
