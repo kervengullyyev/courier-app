@@ -11,10 +11,14 @@ import 'package:flutter/services.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:go_router/go_router.dart';
+import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:provider/provider.dart';
 import '../../widgets/app_bottom_navigation.dart';
 import '../../theme/app_theme.dart';
 import '../../models/delivery.dart';
 import '../../services/delivery_service.dart';
+import '../../services/localization_service.dart';
+import '../../services/user_service.dart';
 
 class CreateDeliveryScreen extends StatefulWidget {
   const CreateDeliveryScreen({Key? key}) : super(key: key);
@@ -35,19 +39,156 @@ class _CreateDeliveryScreenState extends State<CreateDeliveryScreen> {
   final _senderPhoneController = TextEditingController();
   final FocusNode _senderNameFocus = FocusNode();
   final DeliveryService _deliveryService = DeliveryService();
+  final UserService _userService = UserService();
   
   String _selectedServiceType = 'city'; // 'city' or 'region'
-  String _selectedPickupType = 'easybox'; // 'easybox' or 'address'
+  String _selectedPickupType = 'office'; // 'office' or 'address'
   String _selectedPickupLocation = ''; // Selected location name
-  String _selectedDeliveryType = 'easybox'; // 'easybox' or 'address'
+  String _selectedDeliveryType = 'office'; // 'office' or 'address'
   String _selectedDeliveryLocation = ''; // Selected delivery location name
   bool _isPickupSelected = false; // Track if pickup button is clicked
   bool _isDeliverySelected = false; // Track if delivery button is clicked
   bool _isProcessing = false; // Track if delivery is being processed
-  int get _totalPrice => _selectedServiceType == 'city' ? 15 : 35;
+  // Location mapping with proper structure
+  static const Map<String, Map<String, dynamic>> _locations = {
+    // City locations
+    'bagtyyarlyk_etrap': {
+      'name': 'Bagtyyarlyk Etrap',
+      'description': 'Central district with business centers',
+      'price': 10,
+      'type': 'city',
+    },
+    'berkararlyk_etrap': {
+      'name': 'Berkararlyk Etrap',
+      'description': 'Residential area with shopping centers',
+      'price': 10,
+      'type': 'city',
+    },
+    'buzmeyin_etrap': {
+      'name': 'Buzmeyin Etrap',
+      'description': 'Industrial zone with warehouses',
+      'price': 10,
+      'type': 'city',
+    },
+    'kopetdag_etrap': {
+      'name': 'Kopetdag Etrap',
+      'description': 'Mountain area with scenic views',
+      'price': 10,
+      'type': 'city',
+    },
+    'anew': {
+      'name': 'Anew',
+      'description': 'Historic city with cultural sites',
+      'price': 20,
+      'type': 'city',
+    },
+    'gokdepe': {
+      'name': 'Gokdepe',
+      'description': 'Modern city with new developments',
+      'price': 30,
+      'type': 'city',
+    },
+    'arkadag': {
+      'name': 'Arkadag',
+      'description': 'New administrative center',
+      'price': 30,
+      'type': 'city',
+    },
+    // Inter-city locations
+    'mary_shaher': {
+      'name': 'Mary Shaher',
+      'description': 'Major city in Mary region',
+      'price': 40,
+      'type': 'inter_city',
+    },
+    'wekilbazar_etrap': {
+      'name': 'Wekilbazar Etrap',
+      'description': 'Agricultural district in Mary region',
+      'price': 50,
+      'type': 'inter_city',
+    },
+    'sakarcage_etrap': {
+      'name': 'Sakarcage Etrap',
+      'description': 'Rural district with farming communities',
+      'price': 50,
+      'type': 'inter_city',
+    },
+    'bayramaly_etrap': {
+      'name': 'Bayramaly Etrap',
+      'description': 'Desert region with oil fields',
+      'price': 60,
+      'type': 'inter_city',
+    },
+    'murgap_etrap': {
+      'name': 'Murgap Etrap',
+      'description': 'Oasis region with water resources',
+      'price': 60,
+      'type': 'inter_city',
+    },
+    'mary_etrap': {
+      'name': 'Mary Etrap',
+      'description': 'Central district of Mary region',
+      'price': 50,
+      'type': 'inter_city',
+    },
+  };
+
+  // Helper methods for location access
+  static List<Map<String, String>> get cityLocations => _locations.entries
+      .where((entry) => entry.value['type'] == 'city')
+      .map((entry) => {
+            'key': entry.key,
+            'name': entry.value['name'] as String,
+            'description': entry.value['description'] as String,
+            'price': (entry.value['price'] as int).toString(),
+          })
+      .toList();
+
+  static List<Map<String, String>> get interCityLocations => _locations.entries
+      .where((entry) => entry.value['type'] == 'inter_city')
+      .map((entry) => {
+            'key': entry.key,
+            'name': entry.value['name'] as String,
+            'description': entry.value['description'] as String,
+            'price': (entry.value['price'] as int).toString(),
+          })
+      .toList();
+
+  static int getLocationPrice(String locationKey) {
+    return _locations[locationKey]?['price'] ?? 0;
+  }
+
+  static String getLocationName(String locationKey) {
+    return _locations[locationKey]?['name'] ?? locationKey;
+  }
+
+  int get _totalPrice {
+    if (_selectedPickupLocation.isEmpty || _selectedDeliveryLocation.isEmpty) {
+      return 0;
+    }
+    
+    // Convert location names to keys for lookup
+    final pickupKey = _getLocationKey(_selectedPickupLocation);
+    final deliveryKey = _getLocationKey(_selectedDeliveryLocation);
+    
+    final pickupPrice = getLocationPrice(pickupKey);
+    final deliveryPrice = getLocationPrice(deliveryKey);
+    
+    return pickupPrice + deliveryPrice;
+  }
+
+  // Helper method to convert location name to key
+  String _getLocationKey(String locationName) {
+    return _locations.entries
+        .firstWhere(
+          (entry) => entry.value['name'] == locationName,
+          orElse: () => MapEntry('', {}),
+        )
+        .key;
+  }
   static const String _sheetsWebhookUrl = String.fromEnvironment(
     'SHEETS_WEBHOOK_URL',
-    defaultValue: 'https://script.google.com/macros/s/AKfycbxwU7kCgxVhFdEQ3gxoJ19Y79EjPYPyTvale7xgjg6qQC77ZXUQxqSL71vHbp--6CXJug/exec',
+    defaultValue: 'https://script.google.com/macros/s/AKfycbzadr9Ze3SFcZGasVBxyFVvQZeYJXTm0_dlJX3c17NlxjPmSLGI8FtdyK4txS9ztoUDTw/exec',
   );
 
   @override
@@ -73,12 +214,14 @@ class _CreateDeliveryScreenState extends State<CreateDeliveryScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return Consumer<LocalizationService>(
+      builder: (context, localizationService, child) {
+        return Scaffold(
       backgroundColor: AppTheme.backgroundColor,
       appBar: AppBar(
         backgroundColor: Colors.white,
         elevation: 0,
-        title: Text('TizGo Service', style: AppTheme.headerStyle),
+        title: Text(localizationService.translate('app_title'), style: AppTheme.headerStyle),
         leading: const Icon(Icons.local_shipping, color: AppTheme.primaryColor, size: 28),
       ),
       body: SafeArea(
@@ -98,12 +241,8 @@ class _CreateDeliveryScreenState extends State<CreateDeliveryScreen> {
               child: Align(
                 alignment: Alignment.centerLeft,
                 child: Text(
-                  'Delivery Type',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w500,
-                    color: Colors.grey[600],
-                  ),
+                  localizationService.translate('delivery_type'),
+                  style: AppTheme.labelTextStyle,
                 ),
               ),
             ),
@@ -129,7 +268,11 @@ class _CreateDeliveryScreenState extends State<CreateDeliveryScreen> {
                       // City Option
                   Expanded(
                     child: GestureDetector(
-                      onTap: () => setState(() => _selectedServiceType = 'city'),
+                      onTap: () => setState(() {
+                        _selectedServiceType = 'city';
+                        _selectedPickupLocation = '';
+                        _selectedDeliveryLocation = '';
+                      }),
                       child: Container(
                         padding: EdgeInsets.symmetric(vertical: 8),
                         decoration: BoxDecoration(
@@ -141,10 +284,10 @@ class _CreateDeliveryScreenState extends State<CreateDeliveryScreen> {
                           ),
                         ),
                         child: Text(
-                          'City',
+                          localizationService.translate('city'),
                           textAlign: TextAlign.center,
                           style: TextStyle(
-                            fontSize: 16,
+                            fontSize: AppTheme.fontSizeLarge,
                             fontWeight: FontWeight.w500,
                             color: _selectedServiceType == 'city' ? Colors.white : Colors.black,
                           ),
@@ -158,7 +301,11 @@ class _CreateDeliveryScreenState extends State<CreateDeliveryScreen> {
                   // Inter-City Option
                   Expanded(
                     child: GestureDetector(
-                      onTap: () => setState(() => _selectedServiceType = 'region'),
+                      onTap: () => setState(() {
+                        _selectedServiceType = 'region';
+                        _selectedPickupLocation = '';
+                        _selectedDeliveryLocation = '';
+                      }),
                       child: Container(
                         padding: EdgeInsets.symmetric(vertical: 8),
                         decoration: BoxDecoration(
@@ -170,10 +317,10 @@ class _CreateDeliveryScreenState extends State<CreateDeliveryScreen> {
                           ),
                         ),
                         child: Text(
-                          'Inter-City',
+                          localizationService.translate('inter_city'),
                           textAlign: TextAlign.center,
                           style: TextStyle(
-                            fontSize: 16,
+                            fontSize: AppTheme.fontSizeLarge,
                             fontWeight: FontWeight.w500,
                             color: _selectedServiceType == 'region' ? Colors.white : Colors.black,
                           ),
@@ -193,12 +340,8 @@ class _CreateDeliveryScreenState extends State<CreateDeliveryScreen> {
               child: Align(
                 alignment: Alignment.centerLeft,
                 child: Text(
-                  'Pickup & Delivery Address',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w500,
-                    color: Colors.grey[600],
-                  ),
+                  '${localizationService.translate('pickup_location')} & ${localizationService.translate('delivery_location')}',
+                  style: AppTheme.labelTextStyle,
                 ),
               ),
             ),
@@ -229,7 +372,13 @@ class _CreateDeliveryScreenState extends State<CreateDeliveryScreen> {
                           _isPickupSelected = true;
                           _isDeliverySelected = false;
                         });
-                        _showPickupOptionsDialog();
+                        if (_selectedServiceType == 'city') {
+                          // City service: go directly to location selection
+                          _showLocationDialog(isPickup: true, localizationService: localizationService);
+                        } else {
+                          // Inter-city service: show pickup type options
+                          _showPickupOptionsDialog(localizationService: localizationService);
+                        }
                       },
                       child: Container(
                         padding: EdgeInsets.symmetric(vertical: 8, horizontal: 16),
@@ -245,7 +394,7 @@ class _CreateDeliveryScreenState extends State<CreateDeliveryScreen> {
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
                             Icon(
-                              _selectedPickupType == 'easybox' ? Icons.grid_view : Icons.home,
+                              _selectedPickupType == 'office' ? Icons.grid_view : Icons.home,
                               size: 16,
                               color: _selectedPickupLocation.isNotEmpty ? Colors.white : AppTheme.primaryColor,
                             ),
@@ -254,9 +403,9 @@ class _CreateDeliveryScreenState extends State<CreateDeliveryScreen> {
                               child: Text(
                                 _selectedPickupLocation.isNotEmpty 
                                     ? _selectedPickupLocation
-                                    : 'Select',
+                                    : localizationService.translate('select'),
                                 style: TextStyle(
-                                  fontSize: 16,
+                                  fontSize: AppTheme.fontSizeLarge,
                                   fontWeight: FontWeight.w500,
                                   color: _selectedPickupLocation.isNotEmpty ? Colors.white : Colors.black,
                                 ),
@@ -291,20 +440,30 @@ class _CreateDeliveryScreenState extends State<CreateDeliveryScreen> {
                   // Delivery Button
                   Expanded(
                     child: GestureDetector(
-                      onTap: () {
+                      onTap: _selectedPickupLocation.isEmpty ? null : () {
                         setState(() {
                           _isDeliverySelected = true;
                           _isPickupSelected = false;
                         });
-                        _showDeliveryOptionsDialog();
+                        if (_selectedServiceType == 'city') {
+                          // City service: go directly to location selection
+                          _showLocationDialog(isPickup: false, localizationService: localizationService);
+                        } else {
+                          // Inter-city service: show delivery type options
+                          _showDeliveryOptionsDialog(localizationService: localizationService);
+                        }
                       },
                       child: Container(
                         padding: EdgeInsets.symmetric(vertical: 8, horizontal: 16),
                         decoration: BoxDecoration(
-                          color: _selectedDeliveryLocation.isNotEmpty ? AppTheme.primaryColor : Colors.grey[200],
+                          color: _selectedPickupLocation.isEmpty 
+                              ? Colors.grey[100] 
+                              : (_selectedDeliveryLocation.isNotEmpty ? AppTheme.primaryColor : Colors.grey[200]),
                           borderRadius: BorderRadius.circular(8),
                           border: Border.all(
-                            color: (_isDeliverySelected || _selectedDeliveryLocation.isNotEmpty) ? AppTheme.primaryColor : Colors.grey[300]!,
+                            color: _selectedPickupLocation.isEmpty 
+                                ? Colors.grey[200]!
+                                : ((_isDeliverySelected || _selectedDeliveryLocation.isNotEmpty) ? AppTheme.primaryColor : Colors.grey[300]!),
                             width: 1.6,
                           ),
                         ),
@@ -312,25 +471,31 @@ class _CreateDeliveryScreenState extends State<CreateDeliveryScreen> {
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
                             Icon(
-                              _selectedDeliveryType == 'easybox' ? Icons.grid_view : Icons.home,
+                              _selectedDeliveryType == 'office' ? Icons.grid_view : Icons.home,
                               size: 16,
-                              color: _selectedDeliveryLocation.isNotEmpty ? Colors.white : AppTheme.primaryColor,
+                              color: _selectedPickupLocation.isEmpty 
+                                  ? Colors.grey[400]
+                                  : (_selectedDeliveryLocation.isNotEmpty ? Colors.white : AppTheme.primaryColor),
                             ),
                             SizedBox(width: 8),
                             Flexible(
                               child: Text(
-                                _selectedDeliveryLocation.isNotEmpty 
-                                    ? _selectedDeliveryLocation
-                                    : 'Select',
+                                _selectedPickupLocation.isEmpty 
+                                    ? localizationService.translate('select_pickup_first')
+                                    : (_selectedDeliveryLocation.isNotEmpty 
+                                        ? _selectedDeliveryLocation
+                                        : localizationService.translate('select')),
                                 style: TextStyle(
-                                  fontSize: 16,
+                                  fontSize: AppTheme.fontSizeLarge,
                                   fontWeight: FontWeight.w500,
-                                  color: _selectedDeliveryLocation.isNotEmpty ? Colors.white : Colors.black,
+                                  color: _selectedPickupLocation.isEmpty 
+                                      ? Colors.grey[400]
+                                      : (_selectedDeliveryLocation.isNotEmpty ? Colors.white : Colors.black),
                                 ),
                                 overflow: TextOverflow.ellipsis,
                               ),
                             ),
-                            if (_selectedDeliveryLocation.isEmpty) ...[
+                            if (_selectedDeliveryLocation.isEmpty && _selectedPickupLocation.isNotEmpty) ...[
                               SizedBox(width: 4),
                               Icon(
                                 Icons.keyboard_arrow_down,
@@ -355,12 +520,8 @@ class _CreateDeliveryScreenState extends State<CreateDeliveryScreen> {
               child: Align(
                 alignment: Alignment.centerLeft,
                 child: Text(
-                  'Sender Information',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w500,
-                    color: Colors.grey[600],
-                  ),
+                  localizationService.translate('sender_information'),
+                  style: AppTheme.labelTextStyle,
                 ),
               ),
             ),
@@ -391,8 +552,8 @@ class _CreateDeliveryScreenState extends State<CreateDeliveryScreen> {
                     maxLength: 28,
                     textCapitalization: TextCapitalization.words,
                     decoration: InputDecoration(
-                      hintText: 'Sender Full Name',
-                      hintStyle: TextStyle(fontSize: 16, fontWeight: FontWeight.w500, color: Colors.grey[500]),
+                      hintText: localizationService.translate('sender_name'),
+                      hintStyle: TextStyle(fontSize: AppTheme.fontSizeLarge, fontWeight: FontWeight.w500, color: Colors.grey[500]),
                       enabledBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(8),
                         borderSide: BorderSide(color: Colors.grey[300]!, width: 1.6),
@@ -405,7 +566,7 @@ class _CreateDeliveryScreenState extends State<CreateDeliveryScreen> {
                       counterText: '', // Hide the default counter
                     ),
                   ),
-                  SizedBox(height: 16),
+                  SizedBox(height: 10),
                   // Sender Phone
                   TextFormField(
                     controller: _senderPhoneController,
@@ -415,7 +576,7 @@ class _CreateDeliveryScreenState extends State<CreateDeliveryScreen> {
                       FilteringTextInputFormatter.digitsOnly,
                     ],
                     decoration: InputDecoration(
-                      hintText: 'Sender Phone Number',
+                      hintText: localizationService.translate('sender_phone'),
                       prefixIcon: IntrinsicHeight(
                         child: Padding(
                           padding: EdgeInsets.only(left: 16, right: 6),
@@ -426,7 +587,7 @@ class _CreateDeliveryScreenState extends State<CreateDeliveryScreen> {
                               Text(
                                 '+993',
                                 style: TextStyle(
-                                  fontSize: 16,
+                                  fontSize: AppTheme.fontSizeXLarge,
                                   // fontWeight: FontWeight.w500,
                                   color: Colors.black,
                                 ),
@@ -435,7 +596,7 @@ class _CreateDeliveryScreenState extends State<CreateDeliveryScreen> {
                           ),
                         ),
                       ),
-                      hintStyle: TextStyle(fontSize: 16, fontWeight: FontWeight.w500, color: Colors.grey[500]),
+                      hintStyle: TextStyle(fontSize: AppTheme.fontSizeLarge, fontWeight: FontWeight.w500, color: Colors.grey[500]),
                       enabledBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(8),
                         borderSide: BorderSide(color: Colors.grey[300]!, width: 1.6),
@@ -460,12 +621,8 @@ class _CreateDeliveryScreenState extends State<CreateDeliveryScreen> {
               child: Align(
                 alignment: Alignment.centerLeft,
                 child: Text(
-                  'Recipient Information',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w500,
-                    color: Colors.grey[600],
-                  ),
+                  localizationService.translate('recipient_information'),
+                  style: AppTheme.labelTextStyle,
                 ),
               ),
             ),
@@ -495,8 +652,8 @@ class _CreateDeliveryScreenState extends State<CreateDeliveryScreen> {
                     maxLength: 28,
                     textCapitalization: TextCapitalization.words,
                     decoration: InputDecoration(
-                      hintText: 'Recipient Full Name',
-                      hintStyle: TextStyle(fontSize: 16, fontWeight: FontWeight.w500, color: Colors.grey[500]),
+                      hintText: localizationService.translate('recipient_name'),
+                      hintStyle: TextStyle(fontSize: AppTheme.fontSizeLarge, fontWeight: FontWeight.w500, color: Colors.grey[500]),
                       enabledBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(8),
                         borderSide: BorderSide(color: Colors.grey[300]!, width: 1.6),
@@ -516,7 +673,7 @@ class _CreateDeliveryScreenState extends State<CreateDeliveryScreen> {
                     },
                   ),
                   
-                  SizedBox(height: 16),
+                  SizedBox(height: 10),
                   
                   // Phone Number
                   TextFormField(
@@ -527,7 +684,7 @@ class _CreateDeliveryScreenState extends State<CreateDeliveryScreen> {
                       FilteringTextInputFormatter.digitsOnly,
                     ],
                     decoration: InputDecoration(
-                      hintText: 'Recipient Phone Number',
+                      hintText: localizationService.translate('recipient_phone'),
                       prefixIcon: IntrinsicHeight(
                         child: Padding(
                           padding: EdgeInsets.only(left: 16, right: 6),
@@ -538,7 +695,7 @@ class _CreateDeliveryScreenState extends State<CreateDeliveryScreen> {
                               Text(
                                 '+993',
                                 style: TextStyle(
-                                  fontSize: 16,
+                                  fontSize: AppTheme.fontSizeXLarge,
                                   // fontWeight: FontWeight.w500,
                                   color: Colors.black,
                                 ),
@@ -547,7 +704,7 @@ class _CreateDeliveryScreenState extends State<CreateDeliveryScreen> {
                           ),
                         ),
                       ),
-                      hintStyle: TextStyle(fontSize: 16, fontWeight: FontWeight.w500, color: Colors.grey[500]),
+                      hintStyle: TextStyle(fontSize: AppTheme.fontSizeLarge, fontWeight: FontWeight.w500, color: Colors.grey[500]),
                       enabledBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(8),
                         borderSide: BorderSide(color: Colors.grey[300]!, width: 1.6),
@@ -578,12 +735,8 @@ class _CreateDeliveryScreenState extends State<CreateDeliveryScreen> {
               child: Align(
                 alignment: Alignment.centerLeft,
                 child: Text(
-                  'Package Information',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w500,
-                    color: Colors.grey[600],
-                  ),
+                  localizationService.translate('package_info'),
+                  style: AppTheme.labelTextStyle,
                 ),
               ),
             ),
@@ -616,8 +769,8 @@ class _CreateDeliveryScreenState extends State<CreateDeliveryScreen> {
                         maxLength: 200,
                         textCapitalization: TextCapitalization.sentences,
                         decoration: InputDecoration(
-                          hintText: 'Package Information',
-                          hintStyle: TextStyle(fontSize: 16, fontWeight: FontWeight.w500, color: Colors.grey[500]),
+                          hintText: localizationService.translate('package_info_hint'),
+                          hintStyle: TextStyle(fontSize: AppTheme.fontSizeLarge, fontWeight: FontWeight.w500, color: Colors.grey[500]),
                           enabledBorder: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(8),
                             borderSide: BorderSide(color: Colors.grey[300]!, width: 1.6),
@@ -644,7 +797,7 @@ class _CreateDeliveryScreenState extends State<CreateDeliveryScreen> {
                           padding: EdgeInsets.only(top: 8),
                           child: Text(
                             'Message exceeds 200 characters! Reduce package info.',
-                            style: TextStyle(color: Colors.red, fontSize: 12),
+                            style: TextStyle(color: Colors.red, fontSize: AppTheme.fontSizeSmall),
                           ),
                         ),
                     ],
@@ -683,8 +836,15 @@ class _CreateDeliveryScreenState extends State<CreateDeliveryScreen> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text('Total order', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500, color: Colors.black)),
-                            Text('${_totalPrice.toStringAsFixed(0)} manat', style: TextStyle(fontSize: 24, fontWeight: FontWeight.w800, color: Colors.black)),
+                            Text(localizationService.translate('price'), style: TextStyle(fontSize: AppTheme.fontSizeLarge, fontWeight: FontWeight.w500, color: Colors.black)),
+                            Text('${_totalPrice.toStringAsFixed(0)} ${localizationService.translate('manat')}', style: TextStyle(fontSize: AppTheme.fontSizePrice, fontWeight: FontWeight.w800, color: Colors.black)),
+                            if (_selectedPickupLocation.isNotEmpty && _selectedDeliveryLocation.isNotEmpty) ...[
+                              // SizedBox(height: 4),
+                              // Text(
+                              //   '${_cityLocations[_selectedPickupLocation.toLowerCase()] ?? _interCityLocations[_selectedPickupLocation.toLowerCase()] ?? 0} + ${_cityLocations[_selectedDeliveryLocation.toLowerCase()] ?? _interCityLocations[_selectedDeliveryLocation.toLowerCase()] ?? 0} manat',
+                              //   style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                              // ),
+                            ],
                           ],
                         ),
                       ),
@@ -696,7 +856,7 @@ class _CreateDeliveryScreenState extends State<CreateDeliveryScreen> {
                             height: 48,
                             width: double.infinity,
                             child: ElevatedButton(
-                              onPressed: _isProcessing ? null : _createDelivery,
+                              onPressed: _isProcessing ? null : () => _createDelivery(localizationService),
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: AppTheme.primaryColor,
                                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
@@ -715,10 +875,10 @@ class _CreateDeliveryScreenState extends State<CreateDeliveryScreen> {
                                           ),
                                         ),
                                         SizedBox(width: 8),
-                                        Text('Loading...', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600)),
+                                        Text(localizationService.translate('loading'), style: TextStyle(color: Colors.white, fontSize: AppTheme.fontSizeLarge, fontWeight: FontWeight.w600)),
                                       ],
                                     )
-                                  : Text('Tassykla', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600)),
+                                  : Text(localizationService.translate('tassykla'), style: TextStyle(color: Colors.white, fontSize: AppTheme.fontSizeXLarge, fontWeight: FontWeight.w600)),
                             ),
                           ),
                         ),
@@ -731,15 +891,24 @@ class _CreateDeliveryScreenState extends State<CreateDeliveryScreen> {
           ],
         ),
       ),
-      bottomNavigationBar: AppBottomNavigation(currentIndex: 0),
+        bottomNavigationBar: AppBottomNavigation(currentIndex: 0),
+      );
+      },
     );
   }
 
-  void _createDelivery() async {
+  void _createDelivery(LocalizationService localizationService) async {
     print('Tassykla button clicked!'); // Debug log
     
+    // Check network connectivity
+    final connectivityResult = await Connectivity().checkConnectivity();
+    if (connectivityResult == ConnectivityResult.none) {
+      _showOfflineAlert();
+      return; // Stop if offline
+    }
+    
     // Validate required fields
-    if (!_validateRequiredFields()) {
+    if (!_validateRequiredFields(localizationService)) {
       return; // Stop if validation fails
     }
     
@@ -752,23 +921,77 @@ class _CreateDeliveryScreenState extends State<CreateDeliveryScreen> {
     await _proceedWithSubmission();
   }
 
-  bool _validateRequiredFields() {
+  void _showOfflineAlert() {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          title: Row(
+            children: [
+              Icon(
+                Icons.wifi_off,
+                color: Colors.red[600],
+                size: 24,
+              ),
+              SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'No Internet Connection',
+                  style: TextStyle(
+                    fontSize: AppTheme.fontSizeXLarge,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.grey[800],
+                  ),
+                ),
+              ),
+            ],
+          ),
+          content: Text(
+            'Please check your internet connection and try again. You need to be online to submit delivery requests.',
+            style: TextStyle(
+              fontSize: AppTheme.fontSizeLarge,
+              color: Colors.grey[600],
+              height: 1.4,
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: Text(
+                'OK',
+                style: TextStyle(
+                  fontSize: AppTheme.fontSizeLarge,
+                  fontWeight: FontWeight.w600,
+                  color: AppTheme.primaryColor,
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  bool _validateRequiredFields(LocalizationService localizationService) {
     List<String> errors = [];
     
     // Check pickup location
     if (_selectedPickupLocation.isEmpty) {
-      errors.add('Please select a pickup location');
+      errors.add(localizationService.translate('please_select_pickup'));
     }
     
     // Check delivery location
     if (_selectedDeliveryLocation.isEmpty) {
-      errors.add('Please select a delivery location');
+      errors.add(localizationService.translate('please_select_delivery'));
     }
     
     // Check sender name (minimum 2 characters)
     String senderName = _senderNameController.text.trim();
     if (senderName.isEmpty) {
-      errors.add('Please enter sender full name');
+      errors.add(localizationService.translate('please_enter_sender_name'));
     } else if (senderName.length < 2) {
       errors.add('Sender name must be at least 2 characters');
     }
@@ -776,15 +999,15 @@ class _CreateDeliveryScreenState extends State<CreateDeliveryScreen> {
     // Check sender phone (exactly 8 characters)
     String senderPhone = _senderPhoneController.text.trim();
     if (senderPhone.isEmpty) {
-      errors.add('Please enter sender phone number');
+      errors.add(localizationService.translate('please_enter_phone'));
     } else if (senderPhone.length != 8) {
-      errors.add('Sender phone number must be exactly 8 characters');
+      errors.add(localizationService.translate('phone_8_digits'));
     }
     
     // Check recipient name (minimum 2 characters)
     String recipientName = _recipientNameController.text.trim();
     if (recipientName.isEmpty) {
-      errors.add('Please enter recipient full name');
+      errors.add(localizationService.translate('please_enter_recipient_name'));
     } else if (recipientName.length < 2) {
       errors.add('Recipient name must be at least 2 characters');
     }
@@ -792,9 +1015,9 @@ class _CreateDeliveryScreenState extends State<CreateDeliveryScreen> {
     // Check recipient phone (exactly 8 characters)
     String recipientPhone = _recipientPhoneController.text.trim();
     if (recipientPhone.isEmpty) {
-      errors.add('Please enter recipient phone number');
+      errors.add(localizationService.translate('please_enter_phone'));
     } else if (recipientPhone.length != 8) {
-      errors.add('Recipient phone number must be exactly 8 characters');
+      errors.add(localizationService.translate('phone_8_digits'));
     }
     
     // Show errors if any
@@ -846,7 +1069,7 @@ class _CreateDeliveryScreenState extends State<CreateDeliveryScreen> {
                                 child: Text(
                                   error,
                                   style: TextStyle(
-                                    fontSize: 16,
+                                    fontSize: AppTheme.fontSizeLarge,
                                     color: Colors.grey[700],
                                   ),
                                 ),
@@ -879,7 +1102,7 @@ class _CreateDeliveryScreenState extends State<CreateDeliveryScreen> {
                               'Close',
                               style: TextStyle(
                                 color: Colors.white,
-                                fontSize: 16,
+                                fontSize: AppTheme.fontSizeLarge,
                                 fontWeight: FontWeight.bold,
                               ),
                             ),
@@ -944,7 +1167,7 @@ class _CreateDeliveryScreenState extends State<CreateDeliveryScreen> {
                 Text(
                   'Successful!',
                   style: TextStyle(
-                    fontSize: 16,
+                    fontSize: AppTheme.fontSizeLarge,
                     fontWeight: FontWeight.bold,
                     color: Colors.black,
                   ),
@@ -954,7 +1177,7 @@ class _CreateDeliveryScreenState extends State<CreateDeliveryScreen> {
                 Text(
                   'Your transaction was successful',
                   style: TextStyle(
-                    fontSize: 14,
+                    fontSize: AppTheme.fontSizeMedium,
                     color: Colors.black,
                   ),
                 ),
@@ -966,9 +1189,9 @@ class _CreateDeliveryScreenState extends State<CreateDeliveryScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       // _buildDetailRow('Service Type:', _selectedServiceType == 'city' ? 'City' : 'Regional'),
-                      // _buildDetailRow('Pickup Type:', _selectedPickupType == 'easybox' ? 'EasyBox' : 'Address'),
+                      // _buildDetailRow('Pickup Type:', _selectedPickupType == 'office' ? 'Office' : 'Address'),
                       _buildDetailRow('Pickup Location:', _selectedPickupLocation.isNotEmpty ? _selectedPickupLocation : 'Not specified'),
-                      // _buildDetailRow('Delivery Type:', _selectedDeliveryType == 'easybox' ? 'EasyBox' : 'Address'),
+                      // _buildDetailRow('Delivery Type:', _selectedDeliveryType == 'office' ? 'Office' : 'Address'),
                       _buildDetailRow('Delivery Location:', _selectedDeliveryLocation.isNotEmpty ? _selectedDeliveryLocation : 'Not specified'),
                       _buildDetailRow('Sender Full Name:', _senderNameController.text.isNotEmpty ? _senderNameController.text : 'Not specified'),
                       _buildDetailRow('Sender Phone Number:', _senderPhoneController.text.isNotEmpty ? '+993${_senderPhoneController.text}' : 'Not specified'),
@@ -1000,7 +1223,7 @@ class _CreateDeliveryScreenState extends State<CreateDeliveryScreen> {
                       'OK',
                       style: TextStyle(
                         color: Colors.white,
-                        fontSize: 14,
+                        fontSize: AppTheme.fontSizeMedium,
                         fontWeight: FontWeight.bold,
                       ),
                     ),
@@ -1026,7 +1249,7 @@ class _CreateDeliveryScreenState extends State<CreateDeliveryScreen> {
             child: Text(
               '$label $value',
               style: TextStyle(
-                fontSize: 12,
+                fontSize: AppTheme.fontSizeSmall,
                 color: Colors.black,
               ),
             ),
@@ -1075,6 +1298,10 @@ class _CreateDeliveryScreenState extends State<CreateDeliveryScreen> {
       return;
     }
 
+    // Get saved profile data
+    final savedFullName = await _userService.getFullName();
+    final savedPhoneNumber = await _userService.getPhoneNumber();
+
     // Retry mechanism
     for (int attempt = 1; attempt <= 3; attempt++) {
       try {
@@ -1092,6 +1319,9 @@ class _CreateDeliveryScreenState extends State<CreateDeliveryScreen> {
         'recipientPhone': '993${_recipientPhoneController.text}',
         'packageInfo': _descriptionController.text,
         'price': _totalPrice,
+        // Add profile data
+        'userFullName': savedFullName ?? '',
+        'userPhoneNumber': savedPhoneNumber != null ? '993$savedPhoneNumber' : '',
       };
 
       print('Attempting to connect to: $_sheetsWebhookUrl');
@@ -1165,7 +1395,6 @@ class _CreateDeliveryScreenState extends State<CreateDeliveryScreen> {
           ? _deliveryAddressController.text 
           : _selectedDeliveryLocation,
       status: 'Pending',
-      courier: null,
       recipient: Recipient(
         fullName: _recipientNameController.text,
         phoneNumber: '+993${_recipientPhoneController.text}',
@@ -1189,7 +1418,7 @@ class _CreateDeliveryScreenState extends State<CreateDeliveryScreen> {
     _deliveryService.addAndPersistDelivery(newDelivery);
   }
 
-  void _showPickupOptionsDialog() {
+  void _showPickupOptionsDialog({required LocalizationService localizationService}) {
     // Clear any focused text fields to prevent auto-focusing after closing the sheet
     FocusScope.of(context).unfocus();
     showModalBottomSheet(
@@ -1225,10 +1454,10 @@ class _CreateDeliveryScreenState extends State<CreateDeliveryScreen> {
                     Padding(
                       padding: EdgeInsets.fromLTRB(20, 16, 20, 12),
                       child: Text(
-                        'How do we collect the parcel from you?',
+                        localizationService.translate('how_do_we_collect'),
                         textAlign: TextAlign.center,
                         style: TextStyle(
-                          fontSize: 18,
+                          fontSize: AppTheme.fontSizeXLarge,
                           fontWeight: FontWeight.w600,
                           color: Colors.grey[800],
                         ),
@@ -1244,7 +1473,7 @@ class _CreateDeliveryScreenState extends State<CreateDeliveryScreen> {
                           GestureDetector(
                             onTap: () {
                               setModalState(() {
-                                _selectedPickupType = 'easybox';
+                                _selectedPickupType = 'office';
                               });
                             },
                             child: Container(
@@ -1254,7 +1483,7 @@ class _CreateDeliveryScreenState extends State<CreateDeliveryScreen> {
                                   color: Colors.white,
                                   borderRadius: BorderRadius.circular(12),
                                   border: Border.all(
-                                    color: _selectedPickupType == 'easybox' ? AppTheme.primaryColor : Colors.grey[300]!,
+                                    color: _selectedPickupType == 'office' ? AppTheme.primaryColor : Colors.grey[300]!,
                                     width: 2,
                                   ),
                                 ),
@@ -1267,13 +1496,13 @@ class _CreateDeliveryScreenState extends State<CreateDeliveryScreen> {
                                       height: 24,
                                       decoration: BoxDecoration(
                                         shape: BoxShape.circle,
-                                        color: _selectedPickupType == 'easybox' ? AppTheme.primaryColor : Colors.transparent,
+                                        color: _selectedPickupType == 'office' ? AppTheme.primaryColor : Colors.transparent,
                                         border: Border.all(
-                                          color: _selectedPickupType == 'easybox' ? AppTheme.primaryColor : Colors.grey[400]!,
+                                          color: _selectedPickupType == 'office' ? AppTheme.primaryColor : Colors.grey[400]!,
                                           width: 2,
                                         ),
                                       ),
-                                      child: _selectedPickupType == 'easybox'
+                                      child: _selectedPickupType == 'office'
                                           ? Icon(
                                               Icons.check,
                                               color: Colors.white,
@@ -1290,18 +1519,18 @@ class _CreateDeliveryScreenState extends State<CreateDeliveryScreen> {
                                         crossAxisAlignment: CrossAxisAlignment.start,
                                         children: [
                                           Text(
-                                            'Drop-off at easybox',
+                                            localizationService.translate('drop_off_easybox'),
                                             style: TextStyle(
-                                              fontSize: 16,
+                                              fontSize: AppTheme.fontSizeLarge,
                                               fontWeight: FontWeight.w600,
                                               color: Colors.grey[800],
                                             ),
                                           ),
                                           SizedBox(height: 4),
                                           Text(
-                                            'Load your parcel at any locker near you',
+                                            localizationService.translate('load_parcel_locker'),
                                             style: TextStyle(
-                                              fontSize: 14,
+                                              fontSize: AppTheme.fontSizeMedium,
                                               color: Colors.grey[600],
                                             ),
                                           ),
@@ -1374,18 +1603,18 @@ class _CreateDeliveryScreenState extends State<CreateDeliveryScreen> {
                                         crossAxisAlignment: CrossAxisAlignment.start,
                                         children: [
                                           Text(
-                                            'Pick-up from address',
+                                            localizationService.translate('pickup_from_address'),
                                             style: TextStyle(
-                                              fontSize: 16,
+                                              fontSize: AppTheme.fontSizeLarge,
                                               fontWeight: FontWeight.w600,
                                               color: Colors.grey[800],
                                             ),
                                           ),
                                           SizedBox(height: 4),
                                           Text(
-                                            'The courier will collect the parcel from your address',
+                                            localizationService.translate('courier_collect_address'),
                                             style: TextStyle(
-                                              fontSize: 14,
+                                              fontSize: AppTheme.fontSizeMedium,
                                               color: Colors.grey[600],
                                             ),
                                           ),
@@ -1421,7 +1650,7 @@ class _CreateDeliveryScreenState extends State<CreateDeliveryScreen> {
                           onPressed: _selectedPickupType.isNotEmpty
                               ? () {
                                   Navigator.of(context).pop();
-                                  _showLocationDialog();
+                                  _showLocationDialog(localizationService: localizationService);
                                 }
                               : null,
                           style: ElevatedButton.styleFrom(
@@ -1429,8 +1658,8 @@ class _CreateDeliveryScreenState extends State<CreateDeliveryScreen> {
                             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
                           ),
                           child: Text(
-                            'Continue',
-                            style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600),
+                            localizationService.translate('continue'),
+                            style: TextStyle(color: Colors.white, fontSize: AppTheme.fontSizeLarge, fontWeight: FontWeight.w600),
                           ),
                         ),
                       ),
@@ -1445,22 +1674,31 @@ class _CreateDeliveryScreenState extends State<CreateDeliveryScreen> {
     );
   }
 
-  void _showLocationDialog() {
-    final List<Map<String, String>> locations = _selectedPickupType == 'easybox'
-        ? [
-            {'name': 'Ashgabat Center', 'address': 'Magtymguly Ave, 123'},
-            {'name': 'Berkarar Mall', 'address': 'Gorogly St, 45'},
-            {'name': 'Alem Shopping Center', 'address': 'Bitarap Turkmenistan Ave, 67'},
-            {'name': 'Yimpas Shopping Center', 'address': 'Gurbansoltan Eje Ave, 89'},
-            {'name': 'Teke Bazaar', 'address': 'Teke Bazaar, Block 12'},
-          ]
-        : [
-            {'name': 'Ashgabat City Center', 'address': 'Magtymguly Ave, 123'},
-            {'name': 'Berkarar District', 'address': 'Gorogly St, 45'},
-            {'name': 'Alem District', 'address': 'Bitarap Turkmenistan Ave, 67'},
-            {'name': 'Yimpas District', 'address': 'Gurbansoltan Eje Ave, 89'},
-            {'name': 'Teke Bazaar Area', 'address': 'Teke Bazaar, Block 12'},
-          ];
+  void _showLocationDialog({bool isPickup = true, required LocalizationService localizationService}) {
+    List<Map<String, String>> locations = [];
+    
+    if (_selectedServiceType == 'city') {
+      // City service: only city locations
+      locations = cityLocations.map((location) => {
+        'name': location['name']!,
+        'address': location['description']!,
+        'price': location['price']!,
+      }).toList();
+    } else {
+      // Inter-city service: show all locations (city + inter-city)
+      locations = [
+        ...cityLocations.map((location) => {
+          'name': location['name']!,
+          'address': location['description']!,
+          'price': location['price']!,
+        }),
+        ...interCityLocations.map((location) => {
+          'name': location['name']!,
+          'address': location['description']!,
+          'price': location['price']!,
+        }),
+      ];
+    }
 
     showModalBottomSheet(
       context: context,
@@ -1478,7 +1716,7 @@ class _CreateDeliveryScreenState extends State<CreateDeliveryScreen> {
               ),
               child: SafeArea(child: Column(
                 children: [
-                  SizedBox(height: 16),
+                  SizedBox(height: 24),
                   // Header
                   Padding(
                     padding: EdgeInsets.symmetric(horizontal: 8, vertical: 12),
@@ -1491,7 +1729,7 @@ class _CreateDeliveryScreenState extends State<CreateDeliveryScreen> {
                         Expanded(
                           child: Center(
                             child: Text(
-                              _selectedPickupType == 'easybox' ? 'Select Easybox' : 'Select Address',
+                              isPickup ? localizationService.translate('select_pickup_location') : localizationService.translate('select_delivery_location'),
                               style: TextStyle(
                                 fontSize: 18,
                                 fontWeight: FontWeight.w600,
@@ -1523,11 +1761,11 @@ class _CreateDeliveryScreenState extends State<CreateDeliveryScreen> {
                           ),
                           title: Text(
                             location['name']!,
-                            style: TextStyle(fontSize: 16, color: Colors.grey[800], fontWeight: FontWeight.w500),
+                            style: TextStyle(fontSize: AppTheme.fontSizeLarge, color: Colors.grey[800], fontWeight: FontWeight.w500),
                           ),
                           subtitle: Text(
                             location['address'] ?? '',
-                            style: TextStyle(fontSize: 13, color: Colors.grey[600]),
+                            style: TextStyle(fontSize: AppTheme.fontSizeSmall, color: Colors.grey[600]),
                           ),
                           onTap: () => setModalState(() => selectedIndex = index),
                         );
@@ -1546,7 +1784,15 @@ class _CreateDeliveryScreenState extends State<CreateDeliveryScreen> {
                             ? null
                             : () {
                                 setState(() {
-                                  _selectedPickupLocation = locations[selectedIndex]['name']!;
+                                  if (isPickup) {
+                                    _selectedPickupLocation = locations[selectedIndex]['name']!;
+                                    // Reset delivery location if service type is inter-city
+                                    if (_selectedServiceType == 'region') {
+                                      _selectedDeliveryLocation = '';
+                                    }
+                                  } else {
+                                    _selectedDeliveryLocation = locations[selectedIndex]['name']!;
+                                  }
                                   // Leave selection state unchanged; do not auto-open delivery
                                 });
                                 Navigator.of(context).pop();
@@ -1555,7 +1801,7 @@ class _CreateDeliveryScreenState extends State<CreateDeliveryScreen> {
                           backgroundColor: AppTheme.primaryColor,
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
                         ),
-                        child: Text('Tassyklа', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600)),
+                        child: Text(localizationService.translate('tassykla'), style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600)),
                       ),
                     ),
                   ),
@@ -1568,7 +1814,7 @@ class _CreateDeliveryScreenState extends State<CreateDeliveryScreen> {
     );
   }
 
-  void _showDeliveryOptionsDialog() {
+  void _showDeliveryOptionsDialog({required LocalizationService localizationService}) {
     // Clear any focused text fields to prevent auto-focusing after closing the sheet
     FocusScope.of(context).unfocus();
     showModalBottomSheet(
@@ -1604,9 +1850,9 @@ class _CreateDeliveryScreenState extends State<CreateDeliveryScreen> {
                     Padding(
                       padding: EdgeInsets.fromLTRB(20, 16, 20, 12),
                       child: Text(
-                        'Where do we deliver the parcel?',
+                        localizationService.translate('where_do_we_deliver'),
                         style: TextStyle(
-                          fontSize: 18,
+                          fontSize: AppTheme.fontSizeXLarge,
                           fontWeight: FontWeight.w600,
                           color: Colors.grey[800],
                         ),
@@ -1622,7 +1868,7 @@ class _CreateDeliveryScreenState extends State<CreateDeliveryScreen> {
                           GestureDetector(
                             onTap: () {
                               setModalState(() {
-                                _selectedDeliveryType = 'easybox';
+                                _selectedDeliveryType = 'office';
                               });
                             },
                             child: Container(
@@ -1632,7 +1878,7 @@ class _CreateDeliveryScreenState extends State<CreateDeliveryScreen> {
                                   color: Colors.white,
                                   borderRadius: BorderRadius.circular(12),
                                   border: Border.all(
-                                    color: _selectedDeliveryType == 'easybox' ? AppTheme.primaryColor : Colors.grey[300]!,
+                                    color: _selectedDeliveryType == 'office' ? AppTheme.primaryColor : Colors.grey[300]!,
                                     width: 2,
                                   ),
                                 ),
@@ -1645,13 +1891,13 @@ class _CreateDeliveryScreenState extends State<CreateDeliveryScreen> {
                                       height: 24,
                                       decoration: BoxDecoration(
                                         shape: BoxShape.circle,
-                                        color: _selectedDeliveryType == 'easybox' ? AppTheme.primaryColor : Colors.transparent,
+                                        color: _selectedDeliveryType == 'office' ? AppTheme.primaryColor : Colors.transparent,
                                         border: Border.all(
-                                          color: _selectedDeliveryType == 'easybox' ? AppTheme.primaryColor : Colors.grey[400]!,
+                                          color: _selectedDeliveryType == 'office' ? AppTheme.primaryColor : Colors.grey[400]!,
                                           width: 2,
                                         ),
                                       ),
-                                      child: _selectedDeliveryType == 'easybox'
+                                      child: _selectedDeliveryType == 'office'
                                           ? Icon(
                                               Icons.check,
                                               color: Colors.white,
@@ -1668,18 +1914,18 @@ class _CreateDeliveryScreenState extends State<CreateDeliveryScreen> {
                                         crossAxisAlignment: CrossAxisAlignment.start,
                                         children: [
                                           Text(
-                                            'Delivery to easybox',
+                                            localizationService.translate('delivery_to_easybox'),
                                             style: TextStyle(
-                                              fontSize: 16,
+                                              fontSize: AppTheme.fontSizeLarge,
                                               fontWeight: FontWeight.w600,
                                               color: Colors.grey[800],
                                             ),
                                           ),
                                           SizedBox(height: 4),
                                           Text(
-                                            'Parcel handover to courier and delivery to any easybox in the country',
+                                            localizationService.translate('parcel_handover_easybox'),
                                             style: TextStyle(
-                                              fontSize: 14,
+                                              fontSize: AppTheme.fontSizeMedium,
                                               color: Colors.grey[600],
                                             ),
                                           ),
@@ -1752,18 +1998,18 @@ class _CreateDeliveryScreenState extends State<CreateDeliveryScreen> {
                                         crossAxisAlignment: CrossAxisAlignment.start,
                                         children: [
                                           Text(
-                                            'Delivery to address',
+                                            localizationService.translate('delivery_to_address'),
                                             style: TextStyle(
-                                              fontSize: 16,
+                                              fontSize: AppTheme.fontSizeLarge,
                                               fontWeight: FontWeight.w600,
                                               color: Colors.grey[800],
                                             ),
                                           ),
                                           SizedBox(height: 4),
                                           Text(
-                                            'Parcel handover to courier and delivery to address',
+                                            localizationService.translate('courier_deliver_address'),
                                             style: TextStyle(
-                                              fontSize: 14,
+                                              fontSize: AppTheme.fontSizeMedium,
                                               color: Colors.grey[600],
                                             ),
                                           ),
@@ -1799,7 +2045,7 @@ class _CreateDeliveryScreenState extends State<CreateDeliveryScreen> {
                           onPressed: _selectedDeliveryType.isNotEmpty
                               ? () {
                                   Navigator.of(context).pop();
-                                  _showDeliveryLocationDialog();
+                                  _showDeliveryLocationDialog(localizationService: localizationService);
                                 }
                               : null,
                           style: ElevatedButton.styleFrom(
@@ -1807,8 +2053,8 @@ class _CreateDeliveryScreenState extends State<CreateDeliveryScreen> {
                             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
                           ),
                           child: Text(
-                            'Continue',
-                            style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600),
+                            localizationService.translate('continue'),
+                            style: TextStyle(color: Colors.white, fontSize: AppTheme.fontSizeLarge, fontWeight: FontWeight.w600),
                           ),
                         ),
                       ),
@@ -1823,22 +2069,37 @@ class _CreateDeliveryScreenState extends State<CreateDeliveryScreen> {
     );
   }
 
-  void _showDeliveryLocationDialog() {
-    final List<Map<String, String>> locations = _selectedDeliveryType == 'easybox'
-        ? [
-            {'name': 'Ashgabat Center', 'address': 'Magtymguly Ave, 123'},
-            {'name': 'Berkarar Mall', 'address': 'Gorogly St, 45'},
-            {'name': 'Alem Shopping Center', 'address': 'Bitarap Turkmenistan Ave, 67'},
-            {'name': 'Yimpas Shopping Center', 'address': 'Gurbansoltan Eje Ave, 89'},
-            {'name': 'Teke Bazaar', 'address': 'Teke Bazaar, Block 12'},
-          ]
-        : [
-            {'name': 'Ashgabat City Center', 'address': 'Magtymguly Ave, 123'},
-            {'name': 'Berkarar District', 'address': 'Gorogly St, 45'},
-            {'name': 'Alem District', 'address': 'Bitarap Turkmenistan Ave, 67'},
-            {'name': 'Yimpas District', 'address': 'Gurbansoltan Eje Ave, 89'},
-            {'name': 'Teke Bazaar Area', 'address': 'Teke Bazaar, Block 12'},
-          ];
+  void _showDeliveryLocationDialog({required LocalizationService localizationService}) {
+    List<Map<String, String>> locations = [];
+    
+    if (_selectedServiceType == 'city') {
+      // City service: only city locations
+      locations = cityLocations.map((location) => {
+        'name': location['name']!,
+        'address': location['description']!,
+        'price': location['price']!,
+      }).toList();
+    } else {
+      // Inter-city service: show opposite locations
+      final pickupKey = _getLocationKey(_selectedPickupLocation);
+      final pickupType = _locations[pickupKey]?['type'];
+      
+      if (pickupType == 'city') {
+        // If pickup is from city, show inter-city locations
+        locations = interCityLocations.map((location) => {
+          'name': location['name']!,
+          'address': location['description']!,
+          'price': location['price']!,
+        }).toList();
+      } else {
+        // If pickup is from inter-city, show city locations
+        locations = cityLocations.map((location) => {
+          'name': location['name']!,
+          'address': location['description']!,
+          'price': location['price']!,
+        }).toList();
+      }
+    }
 
     showModalBottomSheet(
       context: context,
@@ -1869,7 +2130,7 @@ class _CreateDeliveryScreenState extends State<CreateDeliveryScreen> {
                         Expanded(
                           child: Center(
                             child: Text(
-                              _selectedDeliveryType == 'easybox' ? 'Select Easybox' : 'Select Address',
+                              _selectedDeliveryType == 'office' ? 'Select Office' : 'Select Address',
                               style: TextStyle(
                                 fontSize: 18,
                                 fontWeight: FontWeight.w600,
@@ -1901,11 +2162,11 @@ class _CreateDeliveryScreenState extends State<CreateDeliveryScreen> {
                           ),
                           title: Text(
                             location['name']!,
-                            style: TextStyle(fontSize: 16, color: Colors.grey[800], fontWeight: FontWeight.w500),
+                            style: TextStyle(fontSize: AppTheme.fontSizeLarge, color: Colors.grey[800], fontWeight: FontWeight.w500),
                           ),
                           subtitle: Text(
                             location['address'] ?? '',
-                            style: TextStyle(fontSize: 13, color: Colors.grey[600]),
+                            style: TextStyle(fontSize: AppTheme.fontSizeSmall, color: Colors.grey[600]),
                           ),
                           onTap: () => setModalState(() => selectedIndex = index),
                         );
@@ -1932,7 +2193,7 @@ class _CreateDeliveryScreenState extends State<CreateDeliveryScreen> {
                           backgroundColor: AppTheme.primaryColor,
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
                         ),
-                        child: Text('Tassyklа', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600)),
+                        child: Text(localizationService.translate('tassykla'), style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600)),
                       ),
                     ),
                   ),

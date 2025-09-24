@@ -9,14 +9,13 @@ class Delivery {
   final String pickupAddress;
   final String deliveryAddress;
   final String status;
-  final Courier? courier;
   final Recipient? recipient;
   final Sender? sender;
   final String createdAt;
   final double price;
   final String serviceType;
-  final String pickupType; // 'easybox' or 'address'
-  final String deliveryType; // 'easybox' or 'address'
+  final String pickupType; // 'office' or 'address'
+  final String deliveryType; // 'office' or 'address'
   final String pickupLocation; // Selected location name
   final String deliveryLocation; // Selected delivery location name
   final String? packageDescription;
@@ -26,7 +25,6 @@ class Delivery {
     required this.pickupAddress,
     required this.deliveryAddress,
     required this.status,
-    this.courier,
     this.recipient,
     this.sender,
     required this.createdAt,
@@ -45,9 +43,6 @@ class Delivery {
       pickupAddress: json['pickupAddress'] as String,
       deliveryAddress: json['deliveryAddress'] as String,
       status: json['status'] as String,
-      courier: json['courier'] != null 
-          ? Courier.fromJson(json['courier'] as Map<String, dynamic>)
-          : null,
       recipient: json['recipient'] != null 
           ? Recipient.fromJson(json['recipient'] as Map<String, dynamic>)
           : null,
@@ -71,7 +66,6 @@ class Delivery {
       'pickupAddress': pickupAddress,
       'deliveryAddress': deliveryAddress,
       'status': status,
-      'courier': courier?.toJson(),
       'recipient': recipient?.toJson(),
       'sender': sender?.toJson(),
       'createdAt': createdAt,
@@ -90,7 +84,6 @@ class Delivery {
     String? pickupAddress,
     String? deliveryAddress,
     String? status,
-    Courier? courier,
     Recipient? recipient,
     Sender? sender,
     String? createdAt,
@@ -107,7 +100,6 @@ class Delivery {
       pickupAddress: pickupAddress ?? this.pickupAddress,
       deliveryAddress: deliveryAddress ?? this.deliveryAddress,
       status: status ?? this.status,
-      courier: courier ?? this.courier,
       recipient: recipient ?? this.recipient,
       sender: sender ?? this.sender,
       createdAt: createdAt ?? this.createdAt,
@@ -122,33 +114,6 @@ class Delivery {
   }
 }
 
-class Courier {
-  final String fullName;
-  final String? phoneNumber;
-  final String? vehicleType;
-
-  const Courier({
-    required this.fullName,
-    this.phoneNumber,
-    this.vehicleType,
-  });
-
-  factory Courier.fromJson(Map<String, dynamic> json) {
-    return Courier(
-      fullName: json['full_name'] as String,
-      phoneNumber: json['phoneNumber'] as String?,
-      vehicleType: json['vehicleType'] as String?,
-    );
-  }
-
-  Map<String, dynamic> toJson() {
-    return {
-      'full_name': fullName,
-      'phoneNumber': phoneNumber,
-      'vehicleType': vehicleType,
-    };
-  }
-}
 
 class Recipient {
   final String fullName;
@@ -198,57 +163,4 @@ class Sender {
   }
 }
 
-class Location {
-  final String name;
-  final String address;
-  final String type; // 'easybox' or 'address'
-  final double? latitude;
-  final double? longitude;
 
-  const Location({
-    required this.name,
-    required this.address,
-    required this.type,
-    this.latitude,
-    this.longitude,
-  });
-
-  factory Location.fromJson(Map<String, dynamic> json) {
-    return Location(
-      name: json['name'] as String,
-      address: json['address'] as String,
-      type: json['type'] as String,
-      latitude: json['latitude'] as double?,
-      longitude: json['longitude'] as double?,
-    );
-  }
-
-  Map<String, dynamic> toJson() {
-    return {
-      'name': name,
-      'address': address,
-      'type': type,
-      'latitude': latitude,
-      'longitude': longitude,
-    };
-  }
-}
-
-enum DeliveryStatus {
-  pending('Pending'),
-  inTransit('In Transit'),
-  delivered('Delivered'),
-  cancelled('Cancelled');
-
-  const DeliveryStatus(this.displayName);
-  final String displayName;
-}
-
-enum ServiceType {
-  city('City', 15.0),
-  interCity('Inter-City', 35.0);
-
-  const ServiceType(this.displayName, this.price);
-  final String displayName;
-  final double price;
-}

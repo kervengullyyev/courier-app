@@ -8,10 +8,12 @@
 
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:provider/provider.dart';
 import '../../widgets/app_bottom_navigation.dart';
 import '../../theme/app_theme.dart';
 import '../../models/delivery.dart';
 import '../../services/delivery_service.dart';
+import '../../services/localization_service.dart';
 import 'delivery_details_screen.dart';
 
 class MyDeliveriesScreen extends StatefulWidget {
@@ -37,27 +39,31 @@ class _MyDeliveriesScreenState extends State<MyDeliveriesScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppTheme.backgroundColor,
-      appBar: AppBar(
-        backgroundColor: Colors.white,
-        elevation: 0,
-        title: const Text('My Orders', style: AppTheme.headerStyle),
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Colors.black),
-          onPressed: () => context.go('/create-delivery'),
-        ),
-      ),
-      body: SafeArea(
-        child: _deliveryService.deliveries.isEmpty
-            ? _buildEmptyState()
-            : _buildDeliveriesList(),
-      ),
-      bottomNavigationBar: AppBottomNavigation(currentIndex: 1),
+    return Consumer<LocalizationService>(
+      builder: (context, localizationService, child) {
+        return Scaffold(
+          backgroundColor: AppTheme.backgroundColor,
+          appBar: AppBar(
+            backgroundColor: Colors.white,
+            elevation: 0,
+            title: Text(localizationService.translate('my_orders'), style: AppTheme.headerStyle),
+            leading: IconButton(
+              icon: const Icon(Icons.arrow_back, color: Colors.black),
+              onPressed: () => context.go('/create-delivery'),
+            ),
+          ),
+          body: SafeArea(
+            child: _deliveryService.deliveries.isEmpty
+                ? _buildEmptyState(localizationService)
+                : _buildDeliveriesList(localizationService),
+          ),
+          bottomNavigationBar: AppBottomNavigation(currentIndex: 1),
+        );
+      },
     );
   }
 
-  Widget _buildEmptyState() {
+  Widget _buildEmptyState(LocalizationService localizationService) {
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(AppTheme.largePadding),
@@ -79,19 +85,19 @@ class _MyDeliveriesScreenState extends State<MyDeliveriesScreen> {
             ),
             SizedBox(height: AppTheme.largePadding),
             Text(
-              'No deliveries yet',
+              localizationService.translate('no_deliveries_yet'),
               style: TextStyle(
-                fontSize: 24,
+                fontSize: AppTheme.fontSizeHeader,
                 fontWeight: FontWeight.bold,
                 color: AppTheme.textPrimaryColor,
               ),
             ),
             SizedBox(height: AppTheme.smallPadding),
             Text(
-              'Create your first delivery to get started',
+              localizationService.translate('create_first_delivery'),
               textAlign: TextAlign.center,
               style: TextStyle(
-                fontSize: 16,
+                fontSize: AppTheme.fontSizeLarge,
                 color: AppTheme.textSecondaryColor,
               ),
             ),
@@ -108,7 +114,7 @@ class _MyDeliveriesScreenState extends State<MyDeliveriesScreen> {
                   ),
                 ),
                 child: Text(
-                  'Create Delivery',
+                  localizationService.translate('create_delivery'),
                   style: AppTheme.buttonTextStyle,
                 ),
               ),
@@ -119,7 +125,7 @@ class _MyDeliveriesScreenState extends State<MyDeliveriesScreen> {
     );
   }
 
-  Widget _buildDeliveriesList() {
+  Widget _buildDeliveriesList(LocalizationService localizationService) {
     // Sort deliveries by date (most recent first)
     final sortedDeliveries = List<Delivery>.from(_deliveryService.deliveries)
       ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
@@ -145,21 +151,35 @@ class _MyDeliveriesScreenState extends State<MyDeliveriesScreen> {
                     // Header with ID and Date
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          'Delivery #${delivery.id}',
+                          '${localizationService.translate('delivery_id')}${delivery.id}',
                           style: TextStyle(
-                            fontSize: 18,
+                            fontSize: AppTheme.fontSizeXLarge,
                             fontWeight: FontWeight.bold,
                             color: AppTheme.textPrimaryColor,
                           ),
                         ),
-                        Text(
-                          delivery.createdAt,
-                          style: TextStyle(
-                            fontSize: 14,
-                            color: AppTheme.textSecondaryColor,
-                          ),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          mainAxisAlignment: MainAxisAlignment.start,
+                          children: [
+                            Text(
+                              delivery.createdAt.split(' ')[0], // Date part
+                              style: TextStyle(
+                                fontSize: AppTheme.fontSizeMedium,
+                                color: AppTheme.textSecondaryColor,
+                              ),
+                            ),
+                            Text(
+                              delivery.createdAt.split(' ')[1], // Time part
+                              style: TextStyle(
+                                fontSize: AppTheme.fontSizeSmall,
+                                color: AppTheme.textSecondaryColor,
+                              ),
+                            ),
+                          ],
                         ),
                       ],
                     ),
@@ -168,13 +188,13 @@ class _MyDeliveriesScreenState extends State<MyDeliveriesScreen> {
                     // Addresses
                     _buildAddressRow(
                       icon: Icons.location_on_outlined,
-                      label: 'From',
+                      label: localizationService.translate('from'),
                       address: delivery.pickupAddress,
                     ),
                     SizedBox(height: AppTheme.smallPadding),
                     _buildAddressRow(
                       icon: Icons.location_on,
-                      label: 'To',
+                      label: localizationService.translate('to'),
                       address: delivery.deliveryAddress,
                     ),
                     SizedBox(height: AppTheme.defaultPadding),
@@ -207,16 +227,16 @@ class _MyDeliveriesScreenState extends State<MyDeliveriesScreen> {
                                     crossAxisAlignment: CrossAxisAlignment.start,
                                     children: [
                                       Text(
-                                        'Recipient',
+                                        localizationService.translate('recipient'),
                                         style: TextStyle(
-                                          fontSize: 12,
+                                          fontSize: AppTheme.fontSizeSmall,
                                           color: AppTheme.textSecondaryColor,
                                         ),
                                       ),
                                       Text(
                                         delivery.recipient!.fullName,
                                         style: TextStyle(
-                                          fontSize: 14,
+                                          fontSize: AppTheme.fontSizeMedium,
                                           fontWeight: FontWeight.w500,
                                           color: AppTheme.textPrimaryColor,
                                         ),
@@ -271,7 +291,7 @@ class _MyDeliveriesScreenState extends State<MyDeliveriesScreen> {
               Text(
                 label,
                 style: TextStyle(
-                  fontSize: 12,
+                  fontSize: AppTheme.fontSizeSmall,
                   color: AppTheme.textSecondaryColor,
                 ),
               ),
@@ -279,7 +299,7 @@ class _MyDeliveriesScreenState extends State<MyDeliveriesScreen> {
               Text(
                 address,
                 style: TextStyle(
-                  fontSize: 14,
+                  fontSize: AppTheme.fontSizeMedium,
                   fontWeight: FontWeight.w500,
                   color: AppTheme.textPrimaryColor,
                 ),

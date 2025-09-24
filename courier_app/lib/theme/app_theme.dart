@@ -17,6 +17,17 @@ class AppTheme {
   static const Color textSecondaryColor = Color(0xFF666666);
   static const Color borderColor = Color(0xFFE0E0E0);
   
+  // Font Sizes
+  static const double fontSizeXSmall = 10.0;
+  static const double fontSizeSmall = 12.0;
+  static const double fontSizeMedium = 14.0;
+  static const double fontSizeLarge = 14.0;
+  static const double fontSizeXLarge = 16.0;
+  static const double fontSizeXXLarge = 18.0;
+  static const double fontSizeTitle = 22.0;
+  static const double fontSizeHeader = 24.0;
+  static const double fontSizePrice = 24.0;
+  
   // Spacing
   static const double defaultPadding = 16.0;
   static const double smallPadding = 8.0;
@@ -73,7 +84,7 @@ class AppTheme {
   
   static InputDecoration get hintInputDecoration => InputDecoration(
     hintStyle: const TextStyle(
-      fontSize: 16,
+      fontSize: fontSizeLarge,
       fontWeight: FontWeight.w500,
       color: Color(0xFF999999),
     ),
@@ -90,27 +101,68 @@ class AppTheme {
   
   // Text styles
   static const TextStyle headerStyle = TextStyle(
-    fontSize: 22,
+    fontSize: fontSizeTitle,
     color: textPrimaryColor,
     fontWeight: FontWeight.bold,
   );
   
   static const TextStyle sectionTitleStyle = TextStyle(
-    fontSize: 16,
+    fontSize: fontSizeLarge,
     fontWeight: FontWeight.w500,
     color: textSecondaryColor,
   );
   
   static const TextStyle buttonTextStyle = TextStyle(
     color: Colors.white,
-    fontSize: 18,
+    fontSize: fontSizeXLarge,
     fontWeight: FontWeight.w600,
   );
   
   static const TextStyle priceTextStyle = TextStyle(
-    fontSize: 24,
+    fontSize: fontSizePrice,
     fontWeight: FontWeight.w800,
     color: textPrimaryColor,
+  );
+  
+  // Additional text styles using font size constants
+  static const TextStyle xSmallTextStyle = TextStyle(
+    fontSize: fontSizeXSmall,
+    color: textSecondaryColor,
+  );
+  
+  static const TextStyle smallTextStyle = TextStyle(
+    fontSize: fontSizeSmall,
+    color: textSecondaryColor,
+  );
+  
+  static const TextStyle mediumTextStyle = TextStyle(
+    fontSize: fontSizeMedium,
+    color: textPrimaryColor,
+  );
+  
+  static const TextStyle largeTextStyle = TextStyle(
+    fontSize: fontSizeLarge,
+    color: textPrimaryColor,
+    fontWeight: FontWeight.w500,
+  );
+  
+  static const TextStyle xLargeTextStyle = TextStyle(
+    fontSize: fontSizeXLarge,
+    color: textPrimaryColor,
+    fontWeight: FontWeight.w600,
+  );
+  
+  static const TextStyle xxLargeTextStyle = TextStyle(
+    fontSize: fontSizeXXLarge,
+    color: textPrimaryColor,
+    fontWeight: FontWeight.w600,
+  );
+  
+  // Label text style
+  static const TextStyle labelTextStyle = TextStyle(
+    fontSize: fontSizeLarge,
+    color: textSecondaryColor,
+    fontWeight: FontWeight.w500,
   );
   
   // Container styles

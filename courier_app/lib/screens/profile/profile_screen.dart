@@ -10,9 +10,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:provider/provider.dart';
 import '../../widgets/app_bottom_navigation.dart';
 import '../../theme/app_theme.dart';
 import '../../services/user_service.dart';
+import '../../services/localization_service.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({Key? key}) : super(key: key);
@@ -23,8 +25,18 @@ class ProfileScreen extends StatefulWidget {
 
 class _ProfileScreenState extends State<ProfileScreen> {
   String _savedPhoneNumber = '';
+  String _fullName = '';
   final TextEditingController _phoneController = TextEditingController();
+  final TextEditingController _nameController = TextEditingController();
   final UserService _userService = UserService();
+  
+  // Language selection
+  String _selectedLanguage = 'English';
+  final List<Map<String, String>> _languages = [
+    {'code': 'en', 'name': 'English', 'native': 'English'},
+    {'code': 'ru', 'name': 'Russian', 'native': 'Русский'},
+    {'code': 'tk', 'name': 'Turkmen', 'native': 'Türkmen'},
+  ];
 
   // User data with saved phone
   Map<String, dynamic> get _userProfile => {
@@ -39,8 +51,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   Future<void> _loadSavedPhoneNumber() async {
     final savedPhone = await _userService.getPhoneNumber();
+    final savedName = await _userService.getFullName();
     setState(() {
       _savedPhoneNumber = savedPhone ?? '';
+      _fullName = (savedName ?? '').trim();
       // For the controller, we only want the digits part (without +993)
       _phoneController.text = _savedPhoneNumber;
     });
@@ -49,14 +63,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
   @override
   void dispose() {
     _phoneController.dispose();
+    _nameController.dispose();
     super.dispose();
   }
 
-  void _editField(String field, String currentValue, TextEditingController controller) {
+  void _editField(String field, String currentValue, TextEditingController controller, LocalizationService localizationService, {String? fieldKey}) {
     showDialog(
       context: context,
       builder: (BuildContext context) {
-        controller.text = field.toLowerCase().contains('phone') 
+        final isPhoneField = fieldKey == 'phone' || field.toLowerCase().contains('phone');
+        controller.text = isPhoneField
           ? currentValue.replaceAll('+993', '') 
           : currentValue;
         return AlertDialog(
@@ -65,14 +81,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
             borderRadius: BorderRadius.circular(AppTheme.defaultBorderRadius),
           ),
           title: Text(
-            'Edit $field',
+            '${localizationService.translate('edit_field')} $field',
             style: TextStyle(
-              fontSize: 20,
+              fontSize: AppTheme.fontSizeXXLarge,
               fontWeight: FontWeight.bold,
               color: AppTheme.textPrimaryColor,
             ),
           ),
-          content: field.toLowerCase().contains('phone') 
+          content: isPhoneField 
             ? TextFormField(
                 controller: controller,
                 keyboardType: TextInputType.phone,
@@ -92,7 +108,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           Text(
                             '+993',
                             style: TextStyle(
-                              fontSize: 16,
+                              fontSize: AppTheme.fontSizeLarge,
                               color: Colors.black,
                             ),
                           ),
@@ -111,17 +127,20 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                 ),
               )
-            : TextField(
-                controller: controller,
-                decoration: AppTheme.inputDecoration.copyWith(
-                  hintText: 'Enter $field',
+            : SizedBox(
+                width: double.maxFinite,
+                child: TextField(
+                  controller: controller,
+                  decoration: AppTheme.inputDecoration.copyWith(
+                    hintText: 'Enter $field',
+                  ),
                 ),
               ),
           actions: [
             TextButton(
               onPressed: () => Navigator.of(context).pop(),
               child: Text(
-                'Cancel',
+                localizationService.translate('cancel'),
                 style: TextStyle(
                   color: AppTheme.textSecondaryColor,
                   fontWeight: FontWeight.w500,
@@ -130,7 +149,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ),
             TextButton(
               onPressed: () async {
-                if (field.toLowerCase().contains('phone')) {
+                if (isPhoneField) {
                   // Validate phone number length
                   if (controller.text.length != 8) {
                     ScaffoldMessenger.of(context).showSnackBar(
@@ -148,24 +167,31 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 }
                 
                 setState(() {
-                  if (field.toLowerCase().contains('phone')) {
-                    // For phone numbers, save only the digits part
+                  if (isPhoneField) {
                     _savedPhoneNumber = controller.text;
                     _userProfile['phone'] = '+993${controller.text}';
+                  } else if (fieldKey == 'full_name') {
+                    _fullName = controller.text.trim();
                   } else {
                     _userProfile[field.toLowerCase().replaceAll(' ', '_')] = controller.text;
                   }
                 });
                 
                 // Actually save to SharedPreferences
-                if (field.toLowerCase().contains('phone')) {
+                if (isPhoneField) {
                   await _userService.savePhoneNumber(controller.text);
+                } else if (fieldKey == 'full_name') {
+                  await _userService.saveFullName(controller.text.trim());
                 }
                 
                 Navigator.of(context).pop();
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(
-                    content: Text('$field updated successfully'),
+                    content: Text(fieldKey == 'phone' 
+                      ? localizationService.translate('phone_updated')
+                      : fieldKey == 'full_name' 
+                        ? localizationService.translate('full_name_updated')
+                        : '$field updated successfully'),
                     backgroundColor: Colors.green[600],
                     behavior: SnackBarBehavior.floating,
                     shape: RoundedRectangleBorder(
@@ -175,7 +201,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 );
               },
               child: Text(
-                'Save',
+                localizationService.translate('save'),
                 style: TextStyle(
                   color: AppTheme.primaryColor700,
                   fontWeight: FontWeight.bold,
@@ -190,14 +216,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppTheme.backgroundColor,
-      appBar: AppBar(
-        backgroundColor: Colors.white,
-        elevation: 0,
-        title: Text('Profile', style: AppTheme.headerStyle),
-        leading: const Icon(Icons.person, color: AppTheme.primaryColor, size: 28),
-      ),
+    return Consumer<LocalizationService>(
+      builder: (context, localizationService, child) {
+        return Scaffold(
+          backgroundColor: AppTheme.backgroundColor,
+          appBar: AppBar(
+            backgroundColor: Colors.white,
+            elevation: 0,
+            title: Text(localizationService.translate('profile'), style: AppTheme.headerStyle),
+          ),
       body: SafeArea(
         child: SingleChildScrollView(
           child: Column(
@@ -208,48 +235,27 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 decoration: AppTheme.cardDecoration,
                 child: Padding(
                   padding: const EdgeInsets.all(AppTheme.defaultPadding),
-                  child: Row(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Container(
-                        width: 60,
-                        height: 60,
+                        width: double.infinity,
+                        padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                         decoration: BoxDecoration(
-                          color: AppTheme.primaryColor50,
-                          borderRadius: BorderRadius.circular(30),
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(0),
                         ),
-                        child: Center(
-                          child: Icon(
-                            Icons.person,
-                            size: 30,
-                            color: AppTheme.primaryColor700,
+                        child: Text(
+                          'Hello, ' + (_fullName.isNotEmpty ? _fullName : ''),
+                          style: TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.bold,
+                            color: AppTheme.textPrimaryColor,
                           ),
                         ),
                       ),
-                      SizedBox(width: AppTheme.defaultPadding),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'TizGo User',
-                              style: TextStyle(
-                                fontSize: 20,
-                                fontWeight: FontWeight.bold,
-                                color: AppTheme.textPrimaryColor,
-                              ),
-                            ),
-                            SizedBox(height: 4),
-                            Text(
-                              'Delivery Service',
-                              style: TextStyle(
-                                fontSize: 14,
-                                color: AppTheme.textSecondaryColor,
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
+                      SizedBox(height: 4),
+                      // Remove secondary TizGo service text under the name
                     ],
                   ),
                 ),
@@ -264,11 +270,21 @@ class _ProfileScreenState extends State<ProfileScreen> {
               child: Column(
                 children: [
                   _buildInfoTile(
+                    icon: Icons.person_outline,
+                    title: localizationService.translate('full_name'),
+                    subtitle: _fullName.isEmpty ? '' : _fullName,
+                    fieldKey: 'full_name',
+                    controller: _nameController,
+                    localizationService: localizationService,
+                  ),
+                  _buildDivider(),
+                  _buildInfoTile(
                     icon: Icons.phone_outlined,
-                    title: 'Phone Number',
+                    title: localizationService.translate('phone_number'),
                     subtitle: _userProfile['phone'],
                     fieldKey: 'phone',
                     controller: _phoneController,
+                    localizationService: localizationService,
                   ),
                 ],
               ),
@@ -283,15 +299,22 @@ class _ProfileScreenState extends State<ProfileScreen> {
               child: Column(
                 children: [
                   _buildActionButton(
+                    icon: Icons.language,
+                    title: localizationService.translate('language'),
+                    subtitle: localizationService.getNativeLanguageName(localizationService.currentLanguage),
+                    onTap: () => _showLanguageDialog(localizationService),
+                  ),
+                  _buildDivider(),
+                  _buildActionButton(
                     icon: Icons.help_outline,
-                    title: 'Help & Support',
-                    onTap: () => _showHelpDialog(),
+                    title: localizationService.translate('help_support'),
+                    onTap: () => _showHelpDialog(localizationService),
                   ),
                   _buildDivider(),
                   _buildActionButton(
                     icon: Icons.logout,
-                    title: 'Logout',
-                    onTap: () => _showLogoutDialog(),
+                    title: localizationService.translate('logout'),
+                    onTap: () => _showLogoutDialog(localizationService),
                     isDestructive: true,
                   ),
                 ],
@@ -302,8 +325,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ],
           ),
         ),
-      ),
-      bottomNavigationBar: AppBottomNavigation(currentIndex: 2),
+        ),
+        bottomNavigationBar: AppBottomNavigation(currentIndex: 2),
+      );
+      },
     );
   }
 
@@ -313,9 +338,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
     required String subtitle,
     required String fieldKey,
     required TextEditingController controller,
+    required LocalizationService localizationService,
   }) {
     return GestureDetector(
-      onTap: () => _editField(title, subtitle, controller),
+      onTap: () => _editField(title, subtitle, controller, localizationService, fieldKey: fieldKey),
       child: Padding(
         padding: const EdgeInsets.all(AppTheme.defaultPadding),
         child: Row(
@@ -344,7 +370,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   Text(
                     title,
                     style: TextStyle(
-                      fontSize: 14,
+                      fontSize: AppTheme.fontSizeMedium,
                       color: AppTheme.textSecondaryColor,
                       fontWeight: FontWeight.w500,
                     ),
@@ -353,7 +379,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   Text(
                     subtitle,
                     style: TextStyle(
-                      fontSize: 16,
+                      fontSize: AppTheme.fontSizeLarge,
                       color: AppTheme.textPrimaryColor,
                       fontWeight: FontWeight.w600,
                     ),
@@ -377,6 +403,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     required String title,
     required VoidCallback onTap,
     bool isDestructive = false,
+    String? subtitle,
   }) {
     return Material(
       color: Colors.transparent,
@@ -404,13 +431,29 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ),
               SizedBox(width: AppTheme.defaultPadding),
               Expanded(
-                child: Text(
-                  title,
-                  style: TextStyle(
-                    fontSize: 16,
-                    color: isDestructive ? Colors.red[600] : AppTheme.textPrimaryColor,
-                    fontWeight: FontWeight.w600,
-                  ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: TextStyle(
+                        fontSize: AppTheme.fontSizeLarge,
+                        color: isDestructive ? Colors.red[600] : AppTheme.textPrimaryColor,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    if (subtitle != null) ...[
+                      SizedBox(height: 2),
+                      Text(
+                        subtitle,
+                        style: TextStyle(
+                          fontSize: AppTheme.fontSizeMedium,
+                          color: AppTheme.textSecondaryColor,
+                          fontWeight: FontWeight.w400,
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
               ),
               Icon(
@@ -433,7 +476,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  void _showHelpDialog() {
+  void _showHelpDialog(LocalizationService localizationService) {
     showDialog(
       context: context,
       builder: (BuildContext context) {
@@ -443,9 +486,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
             borderRadius: BorderRadius.circular(AppTheme.defaultBorderRadius),
           ),
           title: Text(
-            'Help & Support',
+            localizationService.translate('help_support'),
             style: TextStyle(
-              fontSize: 20,
+              fontSize: AppTheme.fontSizeXXLarge,
               fontWeight: FontWeight.bold,
               color: AppTheme.textPrimaryColor,
             ),
@@ -455,16 +498,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'Need help? Contact our support team:',
+                localizationService.translate('need_help'),
                 style: TextStyle(
-                  fontSize: 16,
+                  fontSize: AppTheme.fontSizeLarge,
                   color: AppTheme.textPrimaryColor,
                 ),
               ),
               SizedBox(height: 16),
               _buildContactOption(
                 icon: Icons.phone,
-                title: 'Call Support',
+                title: localizationService.translate('call_support'),
                 subtitle: '+99362676755',
                 onTap: () => _makePhoneCall('+99362676755'),
               ),
@@ -474,7 +517,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             TextButton(
               onPressed: () => Navigator.of(context).pop(),
               child: Text(
-                'Close',
+                localizationService.translate('ok'),
                 style: TextStyle(
                   color: AppTheme.primaryColor700,
                   fontWeight: FontWeight.bold,
@@ -515,7 +558,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     Text(
                       title,
                       style: TextStyle(
-                        fontSize: 14,
+                        fontSize: AppTheme.fontSizeMedium,
                         fontWeight: FontWeight.w600,
                         color: AppTheme.textPrimaryColor,
                       ),
@@ -523,7 +566,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     Text(
                       subtitle,
                       style: TextStyle(
-                        fontSize: 12,
+                        fontSize: AppTheme.fontSizeLarge,
                         color: AppTheme.textSecondaryColor,
                       ),
                     ),
@@ -537,7 +580,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  void _showLogoutDialog() {
+  void _showLogoutDialog(LocalizationService localizationService) {
     showDialog(
       context: context,
       builder: (BuildContext context) {
@@ -547,17 +590,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
             borderRadius: BorderRadius.circular(AppTheme.defaultBorderRadius),
           ),
           title: Text(
-            'Logout',
+            localizationService.translate('logout'),
             style: TextStyle(
-              fontSize: 20,
+              fontSize: AppTheme.fontSizeXXLarge,
               fontWeight: FontWeight.bold,
               color: AppTheme.textPrimaryColor,
             ),
           ),
           content: Text(
-            'Are you sure you want to logout?',
+            localizationService.translate('are_you_sure_logout'),
             style: TextStyle(
-              fontSize: 16,
+              fontSize: AppTheme.fontSizeLarge,
               color: AppTheme.textPrimaryColor,
             ),
           ),
@@ -565,7 +608,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             TextButton(
               onPressed: () => Navigator.of(context).pop(),
               child: Text(
-                'Cancel',
+                localizationService.translate('cancel'),
                 style: TextStyle(
                   color: AppTheme.textSecondaryColor,
                   fontWeight: FontWeight.w500,
@@ -576,6 +619,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
               onPressed: () async {
                 // Clear saved data
                 await _userService.clearPhoneNumber();
+                await _userService.clearFullName();
+                setState(() {
+                  _savedPhoneNumber = '';
+                  _fullName = '';
+                });
                 
                 // Navigate to home screen
                 context.go('/create-delivery');
@@ -583,7 +631,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 // Show logout message
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(
-                    content: Text('Logged out successfully'),
+                    content: Text(localizationService.translate('logged_out')),
                     backgroundColor: Colors.green[600],
                     behavior: SnackBarBehavior.floating,
                     shape: RoundedRectangleBorder(
@@ -593,10 +641,123 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 );
               },
               child: Text(
-                'Logout',
+                localizationService.translate('logout'),
                 style: TextStyle(
                   color: Colors.red[600],
                   fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  void _showLanguageDialog(LocalizationService localizationService) {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          backgroundColor: Colors.white,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(AppTheme.defaultBorderRadius),
+          ),
+          title: Text(
+            localizationService.translate('select_language'),
+            style: TextStyle(
+              fontSize: AppTheme.fontSizeXXLarge,
+              fontWeight: FontWeight.bold,
+              color: AppTheme.textPrimaryColor,
+            ),
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: localizationService.getAvailableLanguages().map((language) {
+              final isSelected = localizationService.currentLanguage == language['code'];
+              return Padding(
+                padding: EdgeInsets.only(bottom: 8),
+                child: Material(
+                    color: Colors.transparent,
+                    child: InkWell(
+                      onTap: () async {
+                        await localizationService.changeLanguage(language['code']!);
+                        Navigator.of(context).pop();
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text('${localizationService.translate('language_changed')} ${language['native']}'),
+                            backgroundColor: Colors.green[600],
+                            behavior: SnackBarBehavior.floating,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(AppTheme.defaultBorderRadius),
+                            ),
+                          ),
+                        );
+                      },
+                      borderRadius: BorderRadius.circular(8),
+                      child: Container(
+                        padding: EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                        decoration: BoxDecoration(
+                          color: isSelected ? AppTheme.primaryColor50 : Colors.transparent,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                            color: isSelected ? AppTheme.primaryColor : Colors.grey[300]!,
+                            width: 1,
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            Container(
+                              width: 32,
+                              height: 32,
+                              decoration: BoxDecoration(
+                                color: isSelected ? AppTheme.primaryColor : Colors.grey[200],
+                                borderRadius: BorderRadius.circular(16),
+                          ),
+                          child: Center(
+                            child: Text(
+                              language['code']!.toUpperCase(),
+                              style: TextStyle(
+                                color: isSelected ? Colors.white : Colors.grey[600],
+                                fontWeight: FontWeight.bold,
+                                fontSize: AppTheme.fontSizeSmall,
+                              ),
+                            ),
+                          ),
+                        ),
+                        SizedBox(width: 12),
+                        Expanded(
+                          child: Text(
+                            language['native']!,
+                            style: TextStyle(
+                              fontSize: AppTheme.fontSizeLarge,
+                              fontWeight: FontWeight.w600,
+                              color: AppTheme.textPrimaryColor,
+                            ),
+                          ),
+                        ),
+                        if (isSelected)
+                          Icon(
+                            Icons.check_circle,
+                            color: AppTheme.primaryColor,
+                            size: 20,
+                          ),
+                      ],
+                    ),
+                    ),
+                  ),
+                ),
+              );
+            }).toList(),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: Text(
+                localizationService.translate('cancel'),
+                style: TextStyle(
+                  color: AppTheme.textSecondaryColor,
+                  fontWeight: FontWeight.w500,
                 ),
               ),
             ),

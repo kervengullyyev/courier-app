@@ -8,18 +8,30 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:go_router/go_router.dart';
+import 'package:provider/provider.dart';
 import 'screens/orders/my_deliveries_screen.dart';
 import 'screens/home/create_delivery_screen.dart';
 import 'screens/profile/profile_screen.dart';
 import 'theme/app_theme.dart';
+import 'services/localization_service.dart';
 
-void main() {
+void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  runApp(MyApp());
+  
+  // Initialize localization service
+  final localizationService = LocalizationService();
+  await localizationService.loadLanguage();
+  
+  runApp(MyApp(localizationService: localizationService));
 }
 
 class MyApp extends StatelessWidget {
+  final LocalizationService localizationService;
+  
+  const MyApp({Key? key, required this.localizationService}) : super(key: key);
+  
   @override
   Widget build(BuildContext context) {
     return AnnotatedRegion<SystemUiOverlayStyle>(
@@ -29,8 +41,24 @@ class MyApp extends StatelessWidget {
         systemNavigationBarColor: Colors.white,
         systemNavigationBarIconBrightness: Brightness.dark,
       ),
-      child: MaterialApp.router(
-          title: 'TizGo',
+      child: ChangeNotifierProvider<LocalizationService>.value(
+        value: localizationService,
+        child: Consumer<LocalizationService>(
+          builder: (context, localizationService, child) {
+            return MaterialApp.router(
+              title: 'TizGo',
+              locale: localizationService.currentLanguage == 'tk' 
+                  ? const Locale('en', '') // Fallback to English for Turkmen
+                  : Locale(localizationService.currentLanguage),
+              localizationsDelegates: const [
+                GlobalMaterialLocalizations.delegate,
+                GlobalWidgetsLocalizations.delegate,
+                GlobalCupertinoLocalizations.delegate,
+              ],
+              supportedLocales: const [
+                Locale('en', ''),
+                Locale('ru', ''),
+              ],
           theme: ThemeData(
             primarySwatch: MaterialColor(0xFF0065F8, {
               50: Color(0xFFE3F2FD),
@@ -75,8 +103,11 @@ class MyApp extends StatelessWidget {
               labelMedium: TextStyle(fontFamily: 'Inter'),
               labelSmall: TextStyle(fontFamily: 'Inter'),
             ),
-          ),
-          routerConfig: _router,
+            ),
+            routerConfig: _router,
+            );
+          },
+        ),
       ),
     );
   }

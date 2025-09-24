@@ -7,8 +7,10 @@
 // ============================================================================
 
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../../theme/app_theme.dart';
 import '../../models/delivery.dart';
+import '../../services/localization_service.dart';
 
 class DeliveryDetailsScreen extends StatelessWidget {
   final Delivery delivery;
@@ -20,17 +22,19 @@ class DeliveryDetailsScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppTheme.backgroundColor,
-      appBar: AppBar(
-        backgroundColor: Colors.white,
-        elevation: 0,
-        title: Text('Delivery #${delivery.id}', style: AppTheme.headerStyle),
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Colors.black),
-          onPressed: () => Navigator.of(context).pop(),
-        ),
-      ),
+    return Consumer<LocalizationService>(
+      builder: (context, localizationService, child) {
+        return Scaffold(
+          backgroundColor: AppTheme.backgroundColor,
+          appBar: AppBar(
+            backgroundColor: Colors.white,
+            elevation: 0,
+            title: Text('${localizationService.translate('delivery_id')}${delivery.id}', style: AppTheme.headerStyle),
+            leading: IconButton(
+              icon: const Icon(Icons.arrow_back, color: Colors.black),
+              onPressed: () => Navigator.of(context).pop(),
+            ),
+          ),
       body: SafeArea(
         child: SingleChildScrollView(
           child: Column(
@@ -46,19 +50,19 @@ class DeliveryDetailsScreen extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Service Information',
+                      localizationService.translate('service_information'),
                       style: TextStyle(
-                        fontSize: 18,
+                        fontSize: AppTheme.fontSizeXLarge,
                         fontWeight: FontWeight.bold,
                         color: AppTheme.textPrimaryColor,
                       ),
                     ),
                     SizedBox(height: AppTheme.defaultPadding),
-                    _buildInfoRow('Service Type', delivery.serviceType == 'city' ? 'City Delivery' : 'Inter-City Delivery'),
-                    _buildInfoRow('Pickup Type', delivery.pickupType == 'easybox' ? 'EasyBox' : 'Address'),
-                    _buildInfoRow('Delivery Type', delivery.deliveryType == 'easybox' ? 'EasyBox' : 'Address'),
-                    _buildInfoRow('Price', '${delivery.price.toStringAsFixed(0)} manat'),
-                    _buildInfoRow('Created Date', delivery.createdAt),
+                    _buildInfoRow(localizationService.translate('service_type'), delivery.serviceType == 'city' ? localizationService.translate('city_delivery') : localizationService.translate('inter_city_delivery')),
+                    _buildInfoRow(localizationService.translate('pickup_type'), delivery.serviceType == 'city' ? localizationService.translate('address') : (delivery.pickupType == 'office' ? localizationService.translate('easybox') : localizationService.translate('address'))),
+                    _buildInfoRow(localizationService.translate('delivery_type'), delivery.serviceType == 'city' ? localizationService.translate('address') : (delivery.deliveryType == 'office' ? localizationService.translate('easybox') : localizationService.translate('address'))),
+                    _buildInfoRow(localizationService.translate('price'), '${delivery.price.toStringAsFixed(0)} ${localizationService.translate('manat')}'),
+                    _buildInfoRow(localizationService.translate('created_date'), delivery.createdAt),
                   ],
                 ),
               ),
@@ -72,17 +76,17 @@ class DeliveryDetailsScreen extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Address Information',
+                      localizationService.translate('address_information'),
                       style: TextStyle(
-                        fontSize: 18,
+                        fontSize: AppTheme.fontSizeXLarge,
                         fontWeight: FontWeight.bold,
                         color: AppTheme.textPrimaryColor,
                       ),
                     ),
                     SizedBox(height: AppTheme.defaultPadding),
-                    _buildAddressSection('Pickup Location', delivery.pickupLocation, Icons.location_on_outlined),
+                    _buildAddressSection(localizationService.translate('pickup_location'), delivery.pickupLocation, Icons.location_on_outlined),
                     SizedBox(height: AppTheme.defaultPadding),
-                    _buildAddressSection('Delivery Location', delivery.deliveryLocation, Icons.location_on),
+                    _buildAddressSection(localizationService.translate('delivery_location'), delivery.deliveryLocation, Icons.location_on),
                   ],
                 ),
               ),
@@ -97,16 +101,16 @@ class DeliveryDetailsScreen extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Sender Information',
+                        localizationService.translate('sender_information'),
                         style: TextStyle(
-                          fontSize: 18,
+                          fontSize: AppTheme.fontSizeXLarge,
                           fontWeight: FontWeight.bold,
                           color: AppTheme.textPrimaryColor,
                         ),
                       ),
                       SizedBox(height: AppTheme.defaultPadding),
                       _buildContactSection(
-                        'Sender',
+                        localizationService.translate('sender_name'),
                         delivery.sender!.fullName,
                         delivery.sender!.phoneNumber,
                         Icons.person_outline,
@@ -125,16 +129,16 @@ class DeliveryDetailsScreen extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Recipient Information',
+                        localizationService.translate('recipient_information'),
                         style: TextStyle(
-                          fontSize: 18,
+                          fontSize: AppTheme.fontSizeXLarge,
                           fontWeight: FontWeight.bold,
                           color: AppTheme.textPrimaryColor,
                         ),
                       ),
                       SizedBox(height: AppTheme.defaultPadding),
                       _buildContactSection(
-                        'Recipient',
+                        localizationService.translate('recipient_name'),
                         delivery.recipient!.fullName,
                         delivery.recipient!.phoneNumber,
                         Icons.person_outline,
@@ -153,15 +157,15 @@ class DeliveryDetailsScreen extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Package Information',
+                        localizationService.translate('package_information'),
                         style: TextStyle(
-                          fontSize: 18,
+                          fontSize: AppTheme.fontSizeXLarge,
                           fontWeight: FontWeight.bold,
                           color: AppTheme.textPrimaryColor,
                         ),
                       ),
                       SizedBox(height: AppTheme.defaultPadding),
-                      _buildInfoRow('Description', delivery.packageDescription!),
+                      _buildInfoRow(localizationService.translate('description'), delivery.packageDescription!),
                     ],
                   ),
                 ),
@@ -172,6 +176,8 @@ class DeliveryDetailsScreen extends StatelessWidget {
           ),
         ),
       ),
+        );
+      },
     );
   }
 
@@ -187,7 +193,7 @@ class DeliveryDetailsScreen extends StatelessWidget {
             child: Text(
               label,
               style: TextStyle(
-                fontSize: 14,
+                fontSize: AppTheme.fontSizeMedium,
                 color: AppTheme.textSecondaryColor,
                 fontWeight: FontWeight.w500,
               ),
@@ -197,7 +203,7 @@ class DeliveryDetailsScreen extends StatelessWidget {
             child: Text(
               value,
               style: TextStyle(
-                fontSize: 14,
+                fontSize: AppTheme.fontSizeMedium,
                 color: AppTheme.textPrimaryColor,
                 fontWeight: FontWeight.w500,
               ),
@@ -235,7 +241,7 @@ class DeliveryDetailsScreen extends StatelessWidget {
               Text(
                 title,
                 style: TextStyle(
-                  fontSize: 14,
+                  fontSize: AppTheme.fontSizeMedium,
                   color: AppTheme.textSecondaryColor,
                   fontWeight: FontWeight.w500,
                 ),
@@ -243,9 +249,9 @@ class DeliveryDetailsScreen extends StatelessWidget {
               SizedBox(height: 4),
               Text(
                 address,
-                style: TextStyle(
-                  fontSize: 16,
-                  color: AppTheme.textPrimaryColor,
+              style: TextStyle(
+                fontSize: AppTheme.fontSizeLarge,
+                color: AppTheme.textPrimaryColor,
                   fontWeight: FontWeight.w500,
                 ),
               ),
@@ -283,7 +289,7 @@ class DeliveryDetailsScreen extends StatelessWidget {
               Text(
                 title,
                 style: TextStyle(
-                  fontSize: 14,
+                  fontSize: AppTheme.fontSizeMedium,
                   color: AppTheme.textSecondaryColor,
                   fontWeight: FontWeight.w500,
                 ),
@@ -291,9 +297,9 @@ class DeliveryDetailsScreen extends StatelessWidget {
               SizedBox(height: 4),
               Text(
                 name,
-                style: TextStyle(
-                  fontSize: 16,
-                  color: AppTheme.textPrimaryColor,
+              style: TextStyle(
+                fontSize: AppTheme.fontSizeLarge,
+                color: AppTheme.textPrimaryColor,
                   fontWeight: FontWeight.w600,
                 ),
               ),
@@ -301,7 +307,7 @@ class DeliveryDetailsScreen extends StatelessWidget {
               Text(
                 phone,
                 style: TextStyle(
-                  fontSize: 14,
+                  fontSize: AppTheme.fontSizeMedium,
                   color: AppTheme.textSecondaryColor,
                 ),
               ),
